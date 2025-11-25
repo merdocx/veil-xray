@@ -21,30 +21,29 @@ def generate_short_id(length: int = 8) -> str:
 def generate_reality_keys():
     """
     Генерация пары ключей для Reality (публичный и приватный)
-    
+
     Returns:
         tuple: (public_key, private_key) в формате base64
     """
     private_key = x25519.X25519PrivateKey.generate()
     public_key = private_key.public_key()
-    
+
     # Сериализация приватного ключа
     private_bytes = private_key.private_bytes(
         encoding=serialization.Encoding.Raw,
         format=serialization.PrivateFormat.Raw,
-        encryption_algorithm=serialization.NoEncryption()
+        encryption_algorithm=serialization.NoEncryption(),
     )
-    
+
     # Сериализация публичного ключа
     public_bytes = public_key.public_bytes(
-        encoding=serialization.Encoding.Raw,
-        format=serialization.PublicFormat.Raw
+        encoding=serialization.Encoding.Raw, format=serialization.PublicFormat.Raw
     )
-    
+
     # Кодирование в base64
-    private_key_b64 = base64.b64encode(private_bytes).decode('utf-8')
-    public_key_b64 = base64.b64encode(public_bytes).decode('utf-8')
-    
+    private_key_b64 = base64.b64encode(private_bytes).decode("utf-8")
+    public_key_b64 = base64.b64encode(public_bytes).decode("utf-8")
+
     return public_key_b64, private_key_b64
 
 
@@ -57,11 +56,11 @@ def build_vless_link(
     fingerprint: str,
     public_key: str,
     dest: str,
-    flow: str = "none"
+    flow: str = "none",
 ) -> str:
     """
     Построение VLESS ссылки для клиента
-    
+
     Args:
         uuid: UUID пользователя
         short_id: Short ID для Reality
@@ -72,7 +71,7 @@ def build_vless_link(
         public_key: Публичный ключ Reality
         dest: Dest (сайт-приманка)
         flow: Flow для VLESS
-    
+
     Returns:
         VLESS ссылка в формате vless://...
     """
@@ -85,19 +84,13 @@ def build_vless_link(
         "pbk": public_key,
         "sid": short_id,
         "spx": "/",
-        "flow": flow
+        "flow": flow,
     }
-    
+
     # Формирование параметров запроса
     query_params = "&".join([f"{k}={v}" for k, v in params.items()])
-    
+
     # Формирование VLESS ссылки
-    vless_link = (
-        f"vless://{uuid}@{server_address}:{port}"
-        f"?{query_params}"
-        f"#{dest}"
-    )
-    
+    vless_link = f"vless://{uuid}@{server_address}:{port}" f"?{query_params}" f"#{dest}"
+
     return vless_link
-
-

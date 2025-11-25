@@ -6,30 +6,34 @@ from datetime import datetime
 
 class KeyCreate(BaseModel):
     """Модель для создания ключа"""
+
     name: Optional[str] = None
 
 
 class KeyResponse(BaseModel):
     """Модель ответа с информацией о ключе"""
+
     key_id: int
     uuid: str
     short_id: str
     name: Optional[str]
     created_at: int
     is_active: bool
-    
+
     class Config:
         from_attributes = True
 
 
 class KeyDeleteResponse(BaseModel):
     """Модель ответа при удалении ключа"""
+
     success: bool
     message: str
 
 
 class TrafficResponse(BaseModel):
     """Модель ответа со статистикой трафика"""
+
     key_id: int
     upload: int
     download: int
@@ -39,23 +43,24 @@ class TrafficResponse(BaseModel):
 
 class VlessLinkResponse(BaseModel):
     """Модель ответа с VLESS ссылкой"""
+
     key_id: int
     vless_link: str
 
 
 class KeyListResponse(BaseModel):
     """Модель ответа со списком ключей"""
+
     keys: list[KeyResponse]
     total: int
 
 
 class TrafficResetResponse(BaseModel):
     """Модель ответа при обнулении трафика"""
+
     success: bool
     message: str
     key_id: int
     previous_upload: int
     previous_download: int
     previous_total: int
-
-

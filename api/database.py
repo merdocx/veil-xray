@@ -1,16 +1,25 @@
 """Модели базы данных"""
-from sqlalchemy import create_engine, Column, Integer, String, BigInteger, ForeignKey, Index
+from sqlalchemy import (
+    create_engine,
+    Column,
+    Integer,
+    String,
+    BigInteger,
+    ForeignKey,
+    Index,
+)
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, relationship
 from config.settings import settings
 
-Base = declarative_base()
+Base = declarative_base()  # type: ignore
 
 
-class Key(Base):
+class Key(Base):  # type: ignore
     """Модель ключа пользователя"""
+
     __tablename__ = "keys"
-    
+
     id = Column(Integer, primary_key=True, index=True)
     uuid = Column(String, unique=True, index=True, nullable=False)
     short_id = Column(String(8), unique=True, index=True, nullable=False)
@@ -18,26 +27,29 @@ class Key(Base):
     created_at = Column(BigInteger, nullable=False)
     is_active = Column(Integer, default=1)
     last_used_at = Column(BigInteger, nullable=True)
-    
+
     # Связь с статистикой трафика
-    traffic_stats = relationship("TrafficStats", back_populates="key", cascade="all, delete-orphan")
+    traffic_stats = relationship(
+        "TrafficStats", back_populates="key", cascade="all, delete-orphan"
+    )
 
 
-class TrafficStats(Base):
+class TrafficStats(Base):  # type: ignore
     """Модель статистики трафика"""
+
     __tablename__ = "traffic_stats"
-    
+
     id = Column(Integer, primary_key=True, index=True)
     key_id = Column(Integer, ForeignKey("keys.id"), nullable=False, index=True)
     upload = Column(BigInteger, default=0)
     download = Column(BigInteger, default=0)
     updated_at = Column(BigInteger, nullable=False)
-    
+
     # Связь с ключом
     key = relationship("Key", back_populates="traffic_stats")
-    
+
     # Индекс для быстрого поиска по key_id
-    __table_args__ = (Index('idx_key_id', 'key_id'),)
+    __table_args__ = (Index("idx_key_id", "key_id"),)
 
 
 # Создание движка базы данных
@@ -51,8 +63,7 @@ if db_url.startswith("sqlite:///"):
     db_path.parent.mkdir(parents=True, exist_ok=True)
 
 engine = create_engine(
-    db_url,
-    connect_args={"check_same_thread": False} if "sqlite" in db_url else {}
+    db_url, connect_args={"check_same_thread": False} if "sqlite" in db_url else {}
 )
 
 # Создание сессии
@@ -71,4 +82,3 @@ def get_db():
         yield db
     finally:
         db.close()
-

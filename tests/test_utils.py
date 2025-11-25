@@ -7,7 +7,7 @@ def test_generate_uuid():
     """Тест генерации UUID"""
     uuid1 = generate_uuid()
     uuid2 = generate_uuid()
-    
+
     assert uuid1 != uuid2
     assert len(uuid1) == 36  # Стандартная длина UUID
     assert uuid1.count("-") == 4
@@ -17,10 +17,12 @@ def test_generate_short_id():
     """Тест генерации Short ID"""
     short_id1 = generate_short_id(8)
     short_id2 = generate_short_id(8)
-    
+
     assert short_id1 != short_id2
     assert len(short_id1) == 8
-    assert short_id1.isalnum() or all(c in '0123456789abcdef' for c in short_id1.lower())
+    assert short_id1.isalnum() or all(
+        c in "0123456789abcdef" for c in short_id1.lower()
+    )
 
 
 def test_build_vless_link():
@@ -33,7 +35,7 @@ def test_build_vless_link():
     fingerprint = "chrome"
     public_key = "test_public_key"
     dest = "www.microsoft.com:443"
-    
+
     link = build_vless_link(
         uuid=uuid,
         short_id=short_id,
@@ -42,9 +44,9 @@ def test_build_vless_link():
         sni=sni,
         fingerprint=fingerprint,
         public_key=public_key,
-        dest=dest
+        dest=dest,
     )
-    
+
     assert link.startswith("vless://")
     assert uuid in link
     assert server_address in link
@@ -58,22 +60,21 @@ def test_build_vless_link():
 def test_generate_reality_keys():
     """Тест генерации ключей Reality"""
     from api.utils import generate_reality_keys
-    
+
     public_key, private_key = generate_reality_keys()
-    
+
     assert isinstance(public_key, str)
     assert isinstance(private_key, str)
     assert len(public_key) > 0
     assert len(private_key) > 0
     # Ключи должны быть разными
     assert public_key != private_key
-    
+
     # Проверяем, что это валидный base64
     import base64
+
     try:
         base64.b64decode(public_key)
         base64.b64decode(private_key)
     except Exception:
         pytest.fail("Keys are not valid base64")
-
-
