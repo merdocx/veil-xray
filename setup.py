@@ -9,7 +9,7 @@ with open("requirements.txt", "r", encoding="utf-8") as fh:
 
 setup(
     name="veil-xray",
-    version="1.2.0",
+    version="1.3.0",
     author="Veil Xray Team",
     description="VLESS+Reality VPN Server with API Management",
     long_description=long_description,
