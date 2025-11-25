@@ -11,9 +11,14 @@ mkdir -p logs
 
 # Копирование .env.example в .env если его нет
 if [ ! -f .env ]; then
-    echo "Creating .env file from .env.example..."
-    cp .env.example .env
-    echo "Please edit .env file with your settings!"
+    if [ -f .env.example ]; then
+        echo "Creating .env file from .env.example..."
+        cp .env.example .env
+        echo "Please edit .env file with your settings!"
+    else
+        echo "⚠️  .env.example not found. Please create .env file manually."
+        echo "See README.md for configuration details."
+    fi
 fi
 
 # Генерация ключей Reality если их нет

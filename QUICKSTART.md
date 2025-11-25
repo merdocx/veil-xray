@@ -10,10 +10,10 @@
 
 ## 📋 Текущее состояние
 
-- **Reality Public Key**: `UTJOOyjxZ/QM35IdmIWAwLF676ObaHITUvIUUKA7TQE=`
-- **Reality Private Key**: `ME+tyfHhUD6tQoPT11MBy0leLM0Wu4IVg5MU7giVoW4=` (хранится в `/root/config/reality_keys.txt`)
+После выполнения шагов настройки:
+- **Reality Keys**: Сгенерированы и сохранены в `/root/config/reality_keys.txt`
 - **API Secret Key**: Сгенерирован случайный ключ в `.env`
-- **База данных**: `/root/database/veil_xray.db` (создана)
+- **База данных**: `/root/database/veil_xray.db` (создана автоматически)
 
 ## 🚀 Запуск API сервера
 

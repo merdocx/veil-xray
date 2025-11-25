@@ -43,14 +43,9 @@ python scripts/init_reality_keys.py
 
 ### 4. Настройка конфигурации
 
-Скопируйте пример конфигурации и настройте:
-
-```bash
-cp config/settings.py.example config/settings.py
-# Отредактируйте config/settings.py с вашими настройками
-```
-
-Или создайте файл `.env`:
+Создайте файл `.env` с настройками:
+<｜tool▁calls▁begin｜><｜tool▁call▁begin｜>
+read_file
 
 ```env
 API_SECRET_KEY=your-secret-key-here
