@@ -60,14 +60,18 @@ def migrate_database():
         else:
             logger.info("✅ All keys already use common short_id")
         
-        # Для SQLite: удаление уникального ограничения требует пересоздания таблицы
-        # Это сложная операция, поэтому просто предупреждаем пользователя
+        # Для SQLite: удаляем уникальный индекс, если он существует
         if "sqlite" in db_url:
-            logger.warning(
-                "⚠️  SQLite doesn't support ALTER COLUMN to remove UNIQUE constraint. "
-                "If you encounter errors when creating new keys, you may need to: "
-                "1. Export your data, 2. Delete the database, 3. Recreate it, 4. Import data back."
-            )
+            try:
+                with engine.connect() as conn:
+                    # Удаляем уникальный индекс на short_id
+                    logger.info("Attempting to remove unique index from short_id...")
+                    conn.execute(text("DROP INDEX IF EXISTS ix_keys_short_id;"))
+                    conn.commit()
+                    logger.info("✅ Removed unique index ix_keys_short_id from short_id")
+            except Exception as e:
+                logger.warning(f"⚠️  Could not remove unique index: {e}")
+                logger.info("You may need to manually remove the unique index: DROP INDEX IF EXISTS ix_keys_short_id;")
         else:
             # Для других БД можно попробовать удалить ограничение
             try:

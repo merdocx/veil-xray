@@ -37,7 +37,7 @@ logger = logging.getLogger(__name__)
 app = FastAPI(
     title="Veil Xray API",
     description="API для управления VLESS+Reality VPN сервером",
-    version="1.3.1",
+    version="1.3.2",
 )
 
 
@@ -460,24 +460,40 @@ async def create_key(
         )
 
 
-@app.delete("/api/keys/{key_id}", response_model=KeyDeleteResponse, tags=["Keys"])
+@app.delete("/api/keys/{identifier}", response_model=KeyDeleteResponse, tags=["Keys"])
 async def delete_key(
-    key_id: int, token: str = Depends(verify_token), db: Session = Depends(get_db)
+    identifier: str, token: str = Depends(verify_token), db: Session = Depends(get_db)
 ):
     """
-    Удаление ключа
+    Удаление ключа по UUID или key_id
+    Поддерживает оба формата: /api/keys/{uuid} и /api/keys/{key_id}
 
     - Удаляет пользователя из Xray без перезагрузки
     - Удаляет ключ из базы данных
     """
     try:
-        key = db.query(Key).filter(Key.id == key_id).first()
+        # Пытаемся определить, это UUID или key_id
+        if '-' in identifier:
+            # Это UUID
+            key = db.query(Key).filter(Key.uuid == identifier).first()
+        else:
+            # Это key_id
+            try:
+                key_id = int(identifier)
+                key = db.query(Key).filter(Key.id == key_id).first()
+            except ValueError:
+                raise HTTPException(
+                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    detail=f"Invalid identifier format: {identifier}. Expected UUID or key_id",
+                )
 
         if not key:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Key with id {key_id} not found",
+                detail=f"Key not found",
             )
+
+        key_id = key.id  # type: ignore
 
         # Удаление пользователя из Xray через API и конфигурационный файл
         email = f"user_{key.id}_{key.uuid[:8]}"
@@ -631,23 +647,37 @@ async def get_traffic(
         )
 
 
-@app.get("/api/keys/{key_id}/link", response_model=VlessLinkResponse, tags=["Keys"])
+@app.get("/api/keys/{identifier}/link", response_model=VlessLinkResponse, tags=["Keys"])
 async def get_vless_link(
-    key_id: int, token: str = Depends(verify_token), db: Session = Depends(get_db)
+    identifier: str, token: str = Depends(verify_token), db: Session = Depends(get_db)
 ):
     """
     Получение готовой VLESS ссылки для импорта в клиент
+    Поддерживает оба формата: /api/keys/{uuid}/link и /api/keys/{key_id}/link
 
     - Формирует ссылку с оптимизацией для v2raytun
     - Включает все необходимые параметры Reality
     """
     try:
-        key = db.query(Key).filter(Key.id == key_id).first()
+        # Пытаемся определить, это UUID или key_id
+        if '-' in identifier:
+            # Это UUID
+            key = db.query(Key).filter(Key.uuid == identifier).first()
+        else:
+            # Это key_id
+            try:
+                key_id = int(identifier)
+                key = db.query(Key).filter(Key.id == key_id).first()
+            except ValueError:
+                raise HTTPException(
+                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    detail=f"Invalid identifier format: {identifier}. Expected UUID or key_id",
+                )
 
         if not key:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Key with id {key_id} not found",
+                detail=f"Key not found",
             )
 
         # Получение публичного ключа Reality (должен быть сгенерирован при первом запуске)
@@ -679,7 +709,7 @@ async def get_vless_link(
         vless_link = build_vless_link(
             uuid=key.uuid,  # type: ignore
             short_id=common_short_id,  # Используем общий short_id из настроек
-            server_address=settings.reality_server_name,
+            server_address=settings.domain,
             port=settings.reality_port,
             sni=settings.reality_sni,
             fingerprint=settings.reality_fingerprint,
@@ -688,7 +718,10 @@ async def get_vless_link(
             flow="none",
         )
 
-        return VlessLinkResponse(key_id=key_id, vless_link=vless_link)
+        return VlessLinkResponse(
+            key_id=key.id,  # type: ignore
+            vless_link=vless_link
+        )
 
     except HTTPException:
         raise
@@ -733,20 +766,111 @@ async def list_keys(token: str = Depends(verify_token), db: Session = Depends(ge
         )
 
 
-@app.get("/api/keys/{key_id}", response_model=KeyResponse, tags=["Keys"])
-async def get_key(
-    key_id: int, token: str = Depends(verify_token), db: Session = Depends(get_db)
+@app.get("/api/keys/{identifier}/config", response_model=VlessLinkResponse, tags=["Keys"])
+async def get_key_config(
+    identifier: str, token: str = Depends(verify_token), db: Session = Depends(get_db)
 ):
     """
-    Получение информации о конкретном ключе
+    Получение конфигурации (VLESS ссылки) по UUID или key_id
+    Поддерживает оба формата: /api/keys/{uuid}/config и /api/keys/{key_id}/config
     """
     try:
-        key = db.query(Key).filter(Key.id == key_id).first()
+        # Пытаемся определить, это UUID или key_id
+        # UUID содержит дефисы, key_id - число
+        if '-' in identifier:
+            # Это UUID
+            key = db.query(Key).filter(Key.uuid == identifier).first()
+        else:
+            # Это key_id
+            try:
+                key_id = int(identifier)
+                key = db.query(Key).filter(Key.id == key_id).first()
+            except ValueError:
+                raise HTTPException(
+                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    detail=f"Invalid identifier format: {identifier}. Expected UUID or key_id",
+                )
 
         if not key:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Key with id {key_id} not found",
+                detail=f"Key not found",
+            )
+
+        # Получение публичного ключа Reality
+        if not settings.reality_public_key:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Reality public key not configured",
+            )
+
+        # Конвертируем публичный ключ в URL-safe формат
+        public_key = settings.reality_public_key
+        try:
+            import base64
+            if '/' in public_key or '+' in public_key or public_key.endswith('='):
+                decoded = base64.b64decode(public_key + '==' if not public_key.endswith('=') else public_key)
+                public_key = base64.urlsafe_b64encode(decoded).decode('utf-8').rstrip('=')
+        except Exception:
+            pass
+
+        # Построение VLESS ссылки
+        common_short_id = settings.reality_common_short_id
+        vless_link = build_vless_link(
+            uuid=key.uuid,  # type: ignore
+            short_id=common_short_id,
+            server_address=settings.domain,
+            port=settings.reality_port,
+            sni=settings.reality_sni,
+            fingerprint=settings.reality_fingerprint,
+            public_key=public_key,
+            dest=settings.reality_dest,
+            flow="none",
+        )
+
+        return VlessLinkResponse(
+            key_id=key.id,  # type: ignore
+            vless_link=vless_link,
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error getting key config: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to get key config: {str(e)}",
+        )
+
+
+@app.get("/api/keys/{identifier}", response_model=KeyResponse, tags=["Keys"])
+async def get_key(
+    identifier: str, token: str = Depends(verify_token), db: Session = Depends(get_db)
+):
+    """
+    Получение информации о ключе по UUID или key_id
+    Поддерживает оба формата: /api/keys/{uuid} и /api/keys/{key_id}
+    """
+    try:
+        # Пытаемся определить, это UUID или key_id
+        if '-' in identifier:
+            # Это UUID
+            key = db.query(Key).filter(Key.uuid == identifier).first()
+        else:
+            # Это key_id
+            try:
+                key_id = int(identifier)
+                key = db.query(Key).filter(Key.id == key_id).first()
+            except ValueError:
+                raise HTTPException(
+                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    detail=f"Invalid identifier format: {identifier}. Expected UUID or key_id",
+                )
+
+        if not key:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Key not found",
             )
 
         # Используем общий short_id для всех пользователей
@@ -768,6 +892,206 @@ async def get_key(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to get key: {str(e)}",
+        )
+
+
+@app.get("/api/keys/uuid/{uuid}", response_model=KeyResponse, tags=["Keys"])
+async def get_key_by_uuid(
+    uuid: str, token: str = Depends(verify_token), db: Session = Depends(get_db)
+):
+    """
+    Получение информации о ключе по UUID
+    """
+    try:
+        key = db.query(Key).filter(Key.uuid == uuid).first()
+
+        if not key:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Key with uuid {uuid} not found",
+            )
+
+        # Используем общий short_id для всех пользователей
+        common_short_id = settings.reality_common_short_id
+        
+        return KeyResponse(
+            key_id=key.id,  # type: ignore
+            uuid=key.uuid,  # type: ignore
+            short_id=common_short_id,  # Возвращаем общий short_id
+            name=key.name,  # type: ignore
+            created_at=key.created_at,  # type: ignore
+            is_active=bool(key.is_active),  # type: ignore
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error getting key by UUID: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to get key: {str(e)}",
+        )
+
+
+@app.get("/api/keys/uuid/{uuid}/config", response_model=VlessLinkResponse, tags=["Keys"])
+async def get_key_config_by_uuid(
+    uuid: str, token: str = Depends(verify_token), db: Session = Depends(get_db)
+):
+    """
+    Получение конфигурации (VLESS ссылки) по UUID
+    Алиас для GET /api/keys/{key_id}/link, но работает с UUID
+    """
+    try:
+        key = db.query(Key).filter(Key.uuid == uuid).first()
+
+        if not key:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Key with uuid {uuid} not found",
+            )
+
+        # Получение публичного ключа Reality
+        if not settings.reality_public_key:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Reality public key not configured",
+            )
+
+        # Конвертируем публичный ключ в URL-safe формат
+        public_key = settings.reality_public_key
+        try:
+            import base64
+            if '/' in public_key or '+' in public_key or public_key.endswith('='):
+                decoded = base64.b64decode(public_key + '==' if not public_key.endswith('=') else public_key)
+                public_key = base64.urlsafe_b64encode(decoded).decode('utf-8').rstrip('=')
+        except Exception:
+            pass
+
+        # Построение VLESS ссылки
+        common_short_id = settings.reality_common_short_id
+        vless_link = build_vless_link(
+            uuid=key.uuid,  # type: ignore
+            short_id=common_short_id,
+            server_address=settings.domain,
+            port=settings.reality_port,
+            sni=settings.reality_sni,
+            fingerprint=settings.reality_fingerprint,
+            public_key=public_key,
+            dest=settings.reality_dest,
+            flow="none",
+        )
+
+        return VlessLinkResponse(
+            key_id=key.id,  # type: ignore
+            vless_link=vless_link,
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error getting key config by UUID: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to get key config: {str(e)}",
+        )
+
+
+@app.delete("/api/keys/uuid/{uuid}", response_model=KeyDeleteResponse, tags=["Keys"])
+async def delete_key_by_uuid(
+    uuid: str, token: str = Depends(verify_token), db: Session = Depends(get_db)
+):
+    """
+    Удаление ключа по UUID
+    Алиас для DELETE /api/keys/{key_id}, но работает с UUID
+    """
+    try:
+        key = db.query(Key).filter(Key.uuid == uuid).first()
+
+        if not key:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Key with uuid {uuid} not found",
+            )
+
+        key_id = key.id  # type: ignore
+
+        # Удаление пользователя из Xray через API и конфигурационный файл
+        email = f"user_{key.id}_{key.uuid[:8]}"
+
+        # Пытаемся удалить через Xray API
+        await xray_client.remove_user(email)
+
+        # Удаляем пользователя из конфигурационного файла
+        config_success = False
+        try:
+            common_short_id = settings.reality_common_short_id
+            
+            config_success = await config_task_queue.execute_task_and_wait(
+                task_type=TaskType.REMOVE_USER,
+                uuid=key.uuid,  # type: ignore
+                short_id=common_short_id,
+                email=email,
+                timeout=30.0,
+            )
+            if config_success:
+                logger.info(
+                    f"✅ User {key_id} (UUID: {key.uuid[:8]}...) removed from Xray config file"
+                )
+            else:
+                logger.warning(
+                    f"⚠️  Failed to remove user {key_id} (UUID: {key.uuid[:8]}...) "
+                    f"from Xray config file"
+                )
+        except asyncio.TimeoutError:
+            logger.error(
+                f"❌ Timeout waiting for config update for key {key_id} (UUID: {key.uuid[:8]}...). "
+                f"Trying direct fallback..."
+            )
+            try:
+                common_short_id = settings.reality_common_short_id
+                config_success = xray_config_manager.remove_user_from_config(
+                    uuid=key.uuid, short_id=common_short_id  # type: ignore
+                )
+            except Exception as e:
+                logger.error(f"❌ Fallback config removal also failed: {e}")
+                config_success = False
+        except Exception as e:
+            logger.error(
+                f"❌ Error removing user {key_id} from config: {e}. Trying direct fallback..."
+            )
+            try:
+                common_short_id = settings.reality_common_short_id
+                config_success = xray_config_manager.remove_user_from_config(
+                    uuid=key.uuid, short_id=common_short_id  # type: ignore
+                )
+            except Exception as fallback_error:
+                logger.error(f"❌ Fallback config removal also failed: {fallback_error}")
+                config_success = False
+
+        if not config_success:
+            logger.warning(
+                f"⚠️  Key {key_id} will be removed from database, but user may still exist in Xray config file. "
+                f"Manual cleanup may be required."
+            )
+
+        # Удаление из базы данных
+        db.delete(key)
+        db.commit()
+
+        logger.info(f"Key deleted successfully: {key_id}")
+
+        return KeyDeleteResponse(
+            success=True, message=f"Key {key_id} deleted successfully"
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Error deleting key by UUID: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to delete key: {str(e)}",
         )
 
 

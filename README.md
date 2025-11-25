@@ -56,10 +56,13 @@ cp config/settings.py.example config/settings.py
 API_SECRET_KEY=your-secret-key-here
 REALITY_PUBLIC_KEY=your-public-key-here
 REALITY_PRIVATE_KEY=your-private-key-here
+REALITY_COMMON_SHORT_ID=7bb45050
 DATABASE_URL=sqlite:///./database/veil_xray.db
 XRAY_API_HOST=127.0.0.1
 XRAY_API_PORT=10085
 ```
+
+**Примечание:** `REALITY_COMMON_SHORT_ID` - общий short_id для всех пользователей (по умолчанию `"7bb45050"`). Все ключи используют один и тот же short_id, что позволяет избежать перезагрузки Xray при создании/удалении ключей.
 
 ### 5. Настройка Xray
 
@@ -264,7 +267,7 @@ Content-Type: application/json
 {
   "key_id": 1,
   "uuid": "uuid-значение",
-  "short_id": "short-id",
+  "short_id": "7bb45050",
   "name": "user_name",
   "created_at": 1234567890,
   "is_active": true
@@ -282,7 +285,7 @@ Authorization: Bearer YOUR_SECRET_KEY
 {
   "key_id": 1,
   "uuid": "uuid-значение",
-  "short_id": "short-id",
+  "short_id": "7bb45050",
   "name": "user_name",
   "created_at": 1234567890,
   "is_active": true
@@ -302,7 +305,7 @@ Authorization: Bearer YOUR_SECRET_KEY
     {
       "key_id": 1,
       "uuid": "uuid-значение",
-      "short_id": "short-id",
+      "short_id": "7bb45050",
       "name": "user_name",
       "created_at": 1234567890,
       "is_active": true
