@@ -14,6 +14,7 @@ from api.models import (
     TrafficResponse, VlessLinkResponse, KeyListResponse
 )
 from api.xray_client import XrayClient
+from api.xray_config import XrayConfigManager
 from api.utils import generate_uuid, generate_short_id, build_vless_link
 from config.settings import settings
 
@@ -43,8 +44,9 @@ app.add_middleware(
 # Security
 security = HTTPBearer()
 
-# Инициализация Xray клиента
+# Инициализация Xray клиента и менеджера конфигурации
 xray_client = XrayClient()
+xray_config_manager = XrayConfigManager()
 
 
 def verify_token(credentials: HTTPAuthorizationCredentials = Depends(security)):
@@ -107,13 +109,31 @@ async def create_key(
         db.commit()
         db.refresh(new_key)
         
-        # Добавление пользователя в Xray через API
+        # Добавление пользователя в Xray через API и конфигурационный файл
         email = f"user_{new_key.id}_{uuid_value[:8]}"
-        success = await xray_client.add_user(uuid_value, email)
         
-        if not success:
-            logger.warning(f"Failed to add user to Xray, but key created in DB: {new_key.id}")
-            # Не откатываем транзакцию, так как ключ создан в БД
+        # Пытаемся добавить через Xray API (может не работать, если Xray не запущен)
+        api_success = await xray_client.add_user(uuid_value, email)
+        
+        # Гарантированно добавляем в конфигурационный файл
+        config_success = xray_config_manager.add_user_to_config(
+            uuid=uuid_value,
+            short_id=short_id,
+            email=email
+        )
+        
+        if not config_success:
+            logger.error(f"Failed to add user to Xray config file: {new_key.id}")
+            # Откатываем транзакцию, так как конфигурация не обновлена
+            db.rollback()
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Failed to update Xray configuration"
+            )
+        
+        if not api_success:
+            logger.warning(f"Failed to add user to Xray via API, but config file updated: {new_key.id}")
+            # Это не критично, конфигурация обновлена в файле
         
         # Инициализация статистики трафика
         traffic_stat = TrafficStats(
@@ -166,9 +186,21 @@ async def delete_key(
                 detail=f"Key with id {key_id} not found"
             )
         
-        # Удаление пользователя из Xray через API
+        # Удаление пользователя из Xray через API и конфигурационный файл
         email = f"user_{key.id}_{key.uuid[:8]}"
+        
+        # Пытаемся удалить через Xray API
         await xray_client.remove_user(email)
+        
+        # Гарантированно удаляем из конфигурационного файла
+        config_success = xray_config_manager.remove_user_from_config(
+            uuid=key.uuid,
+            short_id=key.short_id
+        )
+        
+        if not config_success:
+            logger.warning(f"Failed to remove user from Xray config file: {key_id}")
+            # Продолжаем удаление из БД, даже если конфигурация не обновлена
         
         # Удаление из базы данных (каскадное удаление статистики)
         db.delete(key)
