@@ -56,6 +56,8 @@ xray/*.log
 *.key
 *.pem
 secrets/
+config/reality_keys.txt
+.env
 
 # Cursor IDE
 .cursor-server/
