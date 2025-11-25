@@ -1,4 +1,5 @@
 """Тесты для утилит"""
+import pytest
 from api.utils import generate_uuid, generate_short_id, build_vless_link
 
 

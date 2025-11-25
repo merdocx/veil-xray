@@ -249,11 +249,21 @@ def test_get_vless_link_unauthorized(client):
 
 def test_create_key_config_failure(client, auth_headers, monkeypatch):
     """Тест создания ключа при ошибке сохранения конфигурации"""
-    from api.main import xray_config_manager
+    from api.main import xray_config_manager, config_task_queue
+    from unittest.mock import AsyncMock
+    
+    # Мокируем очередь задач, чтобы она выбрасывала исключение
+    # Это заставит код использовать fallback - прямой вызов add_user_to_config
+    async def mock_add_task(*args, **kwargs):
+        raise Exception("Queue unavailable")
     
     # Мокируем add_user_to_config чтобы возвращал False
     original_add = xray_config_manager.add_user_to_config
     xray_config_manager.add_user_to_config = lambda *args, **kwargs: False
+    
+    # Мокируем add_task чтобы выбрасывал исключение
+    original_add_task = config_task_queue.add_task
+    config_task_queue.add_task = mock_add_task
     
     try:
         response = client.post(
@@ -264,6 +274,7 @@ def test_create_key_config_failure(client, auth_headers, monkeypatch):
         assert response.status_code == status.HTTP_500_INTERNAL_SERVER_ERROR
     finally:
         xray_config_manager.add_user_to_config = original_add
+        config_task_queue.add_task = original_add_task
 
 
 def test_get_traffic_with_new_stats(client, auth_headers, mock_xray_client, monkeypatch):
