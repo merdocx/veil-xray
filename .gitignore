@@ -57,3 +57,7 @@ xray/*.log
 *.pem
 secrets/
 
+# Cursor IDE
+.cursor-server/
+.cursor/
+
