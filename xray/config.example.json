@@ -38,7 +38,9 @@
           "minClientVer": "",
           "maxClientVer": "",
           "maxTimeDiff": 0,
-          "shortIds": []
+          "shortIds": [
+            "YOUR_SHORT_ID_HERE"
+          ]
         },
         "tcpSettings": {
           "acceptProxyProtocol": false,
