@@ -14,7 +14,7 @@ from datetime import datetime
 from api.database import get_db, Key, TrafficStats, init_db
 from api.models import (
     KeyCreate, KeyResponse, KeyDeleteResponse,
-    TrafficResponse, VlessLinkResponse, KeyListResponse
+    TrafficResponse, VlessLinkResponse, KeyListResponse, TrafficResetResponse
 )
 from api.xray_client import XrayClient
 from api.xray_config import XrayConfigManager
@@ -732,6 +732,79 @@ async def sync_all_traffic(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to sync traffic: {str(e)}"
+        )
+
+
+@app.post("/api/keys/{key_id}/traffic/reset", response_model=TrafficResetResponse, tags=["Traffic"])
+async def reset_traffic(
+    key_id: int,
+    token: str = Depends(verify_token),
+    db: Session = Depends(get_db)
+):
+    """
+    Обнуление статистики трафика по конкретному ключу
+    
+    - Обнуляет значения upload и download в базе данных
+    - Сохраняет предыдущие значения в ответе
+    - Обновляет timestamp последнего обновления
+    """
+    try:
+        key = db.query(Key).filter(Key.id == key_id).first()
+        
+        if not key:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Key with id {key_id} not found"
+            )
+        
+        # Получаем текущую статистику
+        traffic_stat = db.query(TrafficStats).filter(TrafficStats.key_id == key_id).first()
+        
+        if not traffic_stat:
+            # Если статистики нет, создаем новую запись с нулевыми значениями
+            traffic_stat = TrafficStats(
+                key_id=key_id,
+                upload=0,
+                download=0,
+                updated_at=int(time.time())
+            )
+            db.add(traffic_stat)
+            previous_upload = 0
+            previous_download = 0
+        else:
+            # Сохраняем предыдущие значения
+            previous_upload = traffic_stat.upload
+            previous_download = traffic_stat.download
+            
+            # Обнуляем статистику
+            traffic_stat.upload = 0
+            traffic_stat.download = 0
+            traffic_stat.updated_at = int(time.time())
+        
+        db.commit()
+        
+        logger.info(
+            f"🔄 Traffic reset for key {key_id}: "
+            f"previous upload={previous_upload}, download={previous_download}"
+        )
+        
+        return TrafficResetResponse(
+            success=True,
+            message=f"Traffic reset successfully for key {key_id}",
+            key_id=key_id,
+            previous_upload=previous_upload,
+            previous_download=previous_download,
+            previous_total=previous_upload + previous_download
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Error resetting traffic: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to reset traffic: {str(e)}"
         )
 
 

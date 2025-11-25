@@ -320,6 +320,54 @@ Authorization: Bearer YOUR_SECRET_KEY
 
 ---
 
+#### `POST /api/keys/{key_id}/traffic/reset`
+
+Обнуление статистики трафика по конкретному ключу.
+
+**Запрос:**
+```bash
+POST /api/keys/1/traffic/reset
+Authorization: Bearer YOUR_SECRET_KEY
+```
+
+**Параметры URL:**
+- `key_id` (integer) - идентификатор ключа
+
+**Ответ (успех):**
+```json
+{
+  "success": true,
+  "message": "Traffic reset successfully for key 1",
+  "key_id": 1,
+  "previous_upload": 1024000,
+  "previous_download": 2048000,
+  "previous_total": 3072000
+}
+```
+
+**Поля ответа:**
+- `success` (boolean) - успешность операции
+- `message` (string) - текстовое сообщение о результате
+- `key_id` (integer) - идентификатор ключа
+- `previous_upload` (integer) - значение upload до обнуления (в байтах)
+- `previous_download` (integer) - значение download до обнуления (в байтах)
+- `previous_total` (integer) - общий трафик до обнуления (в байтах)
+
+**Коды ответа:**
+- `200 OK` - трафик успешно обнулен
+- `401 Unauthorized` - неверный токен авторизации
+- `404 Not Found` - ключ не найден
+- `500 Internal Server Error` - ошибка сервера
+
+**Примечания:**
+- Обнуляет значения `upload` и `download` в базе данных
+- Сохраняет предыдущие значения в ответе для истории
+- Обновляет timestamp последнего обновления
+- Если статистики для ключа не было, создается новая запись с нулевыми значениями
+- **Важно:** Обнуление происходит только в базе данных. Xray может продолжать считать трафик, но при следующей синхронизации значения будут обновлены из Xray API
+
+---
+
 #### `POST /api/traffic/sync`
 
 Ручная синхронизация статистики трафика для всех активных ключей.
@@ -438,6 +486,14 @@ response = requests.get(
 traffic = response.json()
 print(f"Traffic: {traffic['total'] / 1024 / 1024:.2f} MB")
 
+# Обнуление статистики трафика
+response = requests.post(
+    f"{API_URL}/api/keys/{key_id}/traffic/reset",
+    headers=headers
+)
+reset_data = response.json()
+print(f"Traffic reset: previous total was {reset_data['previous_total'] / 1024 / 1024:.2f} MB")
+
 # Список всех ключей
 response = requests.get(f"{API_URL}/api/keys", headers=headers)
 keys = response.json()
@@ -513,6 +569,10 @@ curl -X GET "${API_URL}/api/keys/${KEY_ID}/link" \
 curl -X GET "${API_URL}/api/keys/${KEY_ID}/traffic" \
   -H "Authorization: Bearer ${API_KEY}"
 
+# Обнуление статистики трафика
+curl -X POST "${API_URL}/api/keys/${KEY_ID}/traffic/reset" \
+  -H "Authorization: Bearer ${API_KEY}"
+
 # Удаление ключа
 curl -X DELETE "${API_URL}/api/keys/${KEY_ID}" \
   -H "Authorization: Bearer ${API_KEY}"
@@ -556,6 +616,15 @@ async function getTraffic(keyId) {
   return await response.json();
 }
 
+// Обнуление статистики трафика
+async function resetTraffic(keyId) {
+  const response = await fetch(`${API_URL}/api/keys/${keyId}/traffic/reset`, {
+    method: 'POST',
+    headers: headers
+  });
+  return await response.json();
+}
+
 // Использование
 (async () => {
   const key = await createKey('user_123');
@@ -566,6 +635,10 @@ async function getTraffic(keyId) {
   
   const traffic = await getTraffic(key.key_id);
   console.log('Traffic:', traffic.total / 1024 / 1024, 'MB');
+  
+  // Обнуление трафика
+  const reset = await resetTraffic(key.key_id);
+  console.log('Traffic reset, previous total:', reset.previous_total / 1024 / 1024, 'MB');
 })();
 ```
 
@@ -641,10 +714,36 @@ async def traffic_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     else:
         await update.message.reply_text("❌ Ключ не найден")
 
+async def reset_traffic_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Обнуление статистики трафика"""
+    if not context.args:
+        await update.message.reply_text("Использование: /reset_traffic <key_id>")
+        return
+    
+    key_id = context.args[0]
+    response = requests.post(
+        f"{API_URL}/api/keys/{key_id}/traffic/reset",
+        headers=headers
+    )
+    
+    if response.status_code == 200:
+        reset_data = response.json()
+        previous_total_mb = reset_data['previous_total'] / 1024 / 1024
+        
+        await update.message.reply_text(
+            f"🔄 Трафик обнулен для ключа {key_id}\n\n"
+            f"📊 Предыдущий трафик: {previous_total_mb:.2f} MB"
+        )
+    elif response.status_code == 404:
+        await update.message.reply_text("❌ Ключ не найден")
+    else:
+        await update.message.reply_text("❌ Ошибка при обнулении трафика")
+
 # Инициализация бота
 app = Application.builder().token("YOUR_BOT_TOKEN").build()
 app.add_handler(CommandHandler("create", create_key_command))
 app.add_handler(CommandHandler("traffic", traffic_command))
+app.add_handler(CommandHandler("reset_traffic", reset_traffic_command))
 app.run_polling()
 ```
 

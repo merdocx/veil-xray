@@ -333,3 +333,51 @@ def test_sync_all_traffic_with_errors(client, auth_headers, mock_xray_client):
     assert data["updated"] >= 1  # Но хотя бы один должен обновиться
 
 
+def test_reset_traffic(client, auth_headers, mock_xray_client):
+    """Тест обнуления статистики трафика"""
+    # Создаем ключ
+    create_response = client.post(
+        "/api/keys",
+        json={"name": "test_key"},
+        headers=auth_headers
+    )
+    key_id = create_response.json()["key_id"]
+    
+    # Сначала получаем статистику (чтобы создать запись в БД)
+    traffic_response = client.get(f"/api/keys/{key_id}/traffic", headers=auth_headers)
+    assert traffic_response.status_code == status.HTTP_200_OK
+    initial_traffic = traffic_response.json()
+    
+    # Обнуляем трафик
+    response = client.post(f"/api/keys/{key_id}/traffic/reset", headers=auth_headers)
+    assert response.status_code == status.HTTP_200_OK
+    data = response.json()
+    
+    assert data["success"] is True
+    assert data["key_id"] == key_id
+    assert "previous_upload" in data
+    assert "previous_download" in data
+    assert "previous_total" in data
+    assert data["message"] == f"Traffic reset successfully for key {key_id}"
+    
+    # Проверяем, что трафик действительно обнулен
+    traffic_response = client.get(f"/api/keys/{key_id}/traffic", headers=auth_headers)
+    assert traffic_response.status_code == status.HTTP_200_OK
+    reset_traffic = traffic_response.json()
+    assert reset_traffic["upload"] == 0
+    assert reset_traffic["download"] == 0
+    assert reset_traffic["total"] == 0
+
+
+def test_reset_traffic_not_found(client, auth_headers):
+    """Тест обнуления трафика для несуществующего ключа"""
+    response = client.post("/api/keys/99999/traffic/reset", headers=auth_headers)
+    assert response.status_code == status.HTTP_404_NOT_FOUND
+
+
+def test_reset_traffic_unauthorized(client):
+    """Тест обнуления трафика без авторизации"""
+    response = client.post("/api/keys/1/traffic/reset")
+    assert response.status_code == status.HTTP_403_FORBIDDEN
+
+

@@ -49,3 +49,13 @@ class KeyListResponse(BaseModel):
     total: int
 
 
+class TrafficResetResponse(BaseModel):
+    """Модель ответа при обнулении трафика"""
+    success: bool
+    message: str
+    key_id: int
+    previous_upload: int
+    previous_download: int
+    previous_total: int
+
+
