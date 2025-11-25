@@ -54,3 +54,25 @@ def test_build_vless_link():
     assert public_key in link
 
 
+def test_generate_reality_keys():
+    """Тест генерации ключей Reality"""
+    from api.utils import generate_reality_keys
+    
+    public_key, private_key = generate_reality_keys()
+    
+    assert isinstance(public_key, str)
+    assert isinstance(private_key, str)
+    assert len(public_key) > 0
+    assert len(private_key) > 0
+    # Ключи должны быть разными
+    assert public_key != private_key
+    
+    # Проверяем, что это валидный base64
+    import base64
+    try:
+        base64.b64decode(public_key)
+        base64.b64decode(private_key)
+    except Exception:
+        pytest.fail("Keys are not valid base64")
+
+

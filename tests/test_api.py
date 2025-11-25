@@ -164,3 +164,161 @@ def test_get_vless_link(client, auth_headers):
         assert data["vless_link"].startswith("vless://")
 
 
+def test_get_vless_link_not_found(client, auth_headers):
+    """Тест получения VLESS ссылки для несуществующего ключа"""
+    response = client.get("/api/keys/99999/link", headers=auth_headers)
+    assert response.status_code == status.HTTP_404_NOT_FOUND
+
+
+def test_get_traffic_not_found(client, auth_headers):
+    """Тест получения статистики для несуществующего ключа"""
+    response = client.get("/api/keys/99999/traffic", headers=auth_headers)
+    assert response.status_code == status.HTTP_404_NOT_FOUND
+
+
+def test_sync_all_traffic(client, auth_headers, mock_xray_client):
+    """Тест синхронизации статистики для всех ключей"""
+    from unittest.mock import AsyncMock
+    
+    # Создаем несколько ключей
+    for i in range(3):
+        client.post(
+            "/api/keys",
+            json={"name": f"test_key_{i}"},
+            headers=auth_headers
+        )
+    
+    # Мокируем get_user_stats для каждого ключа
+    mock_xray_client.get_user_stats = AsyncMock(return_value={"upload": 1000, "download": 2000})
+    
+    # Синхронизируем статистику
+    response = client.post("/api/traffic/sync", headers=auth_headers)
+    assert response.status_code == status.HTTP_200_OK
+    data = response.json()
+    assert data["success"] is True
+    assert "updated" in data
+    assert "errors" in data
+    assert data["updated"] >= 3
+
+
+def test_sync_all_traffic_unauthorized(client):
+    """Тест синхронизации без авторизации"""
+    response = client.post("/api/traffic/sync")
+    assert response.status_code == status.HTTP_403_FORBIDDEN
+
+
+def test_list_keys_empty(client, auth_headers):
+    """Тест получения пустого списка ключей"""
+    response = client.get("/api/keys", headers=auth_headers)
+    assert response.status_code == status.HTTP_200_OK
+    data = response.json()
+    assert "keys" in data
+    assert "total" in data
+    assert isinstance(data["keys"], list)
+
+
+def test_list_keys_unauthorized(client):
+    """Тест получения списка ключей без авторизации"""
+    response = client.get("/api/keys")
+    assert response.status_code == status.HTTP_403_FORBIDDEN
+
+
+def test_get_key_unauthorized(client):
+    """Тест получения ключа без авторизации"""
+    response = client.get("/api/keys/1")
+    assert response.status_code == status.HTTP_403_FORBIDDEN
+
+
+def test_delete_key_unauthorized(client):
+    """Тест удаления ключа без авторизации"""
+    response = client.delete("/api/keys/1")
+    assert response.status_code == status.HTTP_403_FORBIDDEN
+
+
+def test_get_traffic_unauthorized(client):
+    """Тест получения статистики без авторизации"""
+    response = client.get("/api/keys/1/traffic")
+    assert response.status_code == status.HTTP_403_FORBIDDEN
+
+
+def test_get_vless_link_unauthorized(client):
+    """Тест получения VLESS ссылки без авторизации"""
+    response = client.get("/api/keys/1/link")
+    assert response.status_code == status.HTTP_403_FORBIDDEN
+
+
+def test_create_key_config_failure(client, auth_headers, monkeypatch):
+    """Тест создания ключа при ошибке сохранения конфигурации"""
+    from api.main import xray_config_manager
+    
+    # Мокируем add_user_to_config чтобы возвращал False
+    original_add = xray_config_manager.add_user_to_config
+    xray_config_manager.add_user_to_config = lambda *args, **kwargs: False
+    
+    try:
+        response = client.post(
+            "/api/keys",
+            json={"name": "test_key"},
+            headers=auth_headers
+        )
+        assert response.status_code == status.HTTP_500_INTERNAL_SERVER_ERROR
+    finally:
+        xray_config_manager.add_user_to_config = original_add
+
+
+def test_get_traffic_with_new_stats(client, auth_headers, mock_xray_client, monkeypatch):
+    """Тест получения статистики с созданием новой записи"""
+    from unittest.mock import AsyncMock
+    
+    # Создаем ключ
+    create_response = client.post(
+        "/api/keys",
+        json={"name": "test_key"},
+        headers=auth_headers
+    )
+    key_id = create_response.json()["key_id"]
+    
+    # Мокируем get_user_stats для возврата новых данных
+    mock_xray_client.get_user_stats = AsyncMock(return_value={"upload": 5000, "download": 10000})
+    
+    # Получаем статистику (должна создать новую запись TrafficStats)
+    response = client.get(f"/api/keys/{key_id}/traffic", headers=auth_headers)
+    assert response.status_code == status.HTTP_200_OK
+    data = response.json()
+    assert data["upload"] == 5000
+    assert data["download"] == 10000
+    assert data["total"] == 15000
+
+
+def test_sync_all_traffic_with_errors(client, auth_headers, mock_xray_client):
+    """Тест синхронизации с ошибками для некоторых ключей"""
+    # Создаем несколько ключей
+    key_ids = []
+    for i in range(3):
+        create_response = client.post(
+            "/api/keys",
+            json={"name": f"test_key_{i}"},
+            headers=auth_headers
+        )
+        key_ids.append(create_response.json()["key_id"])
+    
+    # Мокируем get_user_stats чтобы один из вызовов падал с ошибкой
+    call_count = 0
+    async def mock_get_user_stats(email):
+        nonlocal call_count
+        call_count += 1
+        if call_count == 2:  # Второй вызов падает
+            raise Exception("Xray API error")
+        return {"upload": 1000, "download": 2000}
+    
+    mock_xray_client.get_user_stats = mock_get_user_stats
+    
+    # Синхронизируем статистику
+    response = client.post("/api/traffic/sync", headers=auth_headers)
+    assert response.status_code == status.HTTP_200_OK
+    data = response.json()
+    assert data["success"] is True
+    assert data["errors"] >= 1  # Должна быть хотя бы одна ошибка
+    assert data["updated"] >= 1  # Но хотя бы один должен обновиться
+
+

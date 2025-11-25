@@ -67,3 +67,9 @@ config/reality_keys.txt
 # Pip cache
 .cache/
 
+# Coverage
+.coverage
+coverage.xml
+htmlcov/
+*.cover
+

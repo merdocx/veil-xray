@@ -147,8 +147,13 @@ async def create_key(
         short_id = generate_short_id(8)
         
         # Проверка уникальности (на всякий случай)
-        while db.query(Key).filter(Key.short_id == short_id).first():
-            short_id = generate_short_id(8)
+        # Используем try-except для обработки случая, когда таблица еще не создана
+        try:
+            while db.query(Key).filter(Key.short_id == short_id).first():
+                short_id = generate_short_id(8)
+        except Exception:
+            # Если таблица не существует, просто продолжаем (она будет создана)
+            pass
         
         # Создание записи в базе данных
         timestamp = int(time.time())
