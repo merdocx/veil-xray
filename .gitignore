@@ -64,3 +64,6 @@ config/reality_keys.txt
 .cursor-server/
 .cursor/
 
+# Pip cache
+.cache/
+

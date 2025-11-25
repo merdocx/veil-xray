@@ -30,3 +30,4 @@ echo "2. Configure Xray with the private key"
 echo "3. Start Xray service"
 echo "4. Run: python -m api.main"
 
+

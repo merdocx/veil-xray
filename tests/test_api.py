@@ -163,3 +163,4 @@ def test_get_vless_link(client, auth_headers):
         assert "vless_link" in data
         assert data["vless_link"].startswith("vless://")
 
+

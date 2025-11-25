@@ -43,15 +43,17 @@ jobs:
     
     - name: Type check with mypy
       run: |
-        mypy api config --ignore-missing-imports || true
+        mypy api config --ignore-missing-imports
+      continue-on-error: true
     
     - name: Format check with black
       run: |
-        black --check api config tests || true
+        black --check api config tests
+      continue-on-error: true
     
-    - name: Run tests
+    - name: Run tests with coverage
       run: |
-        pytest tests/ -v --cov=api --cov=config --cov-report=xml --cov-report=html
+        pytest tests/ -v --cov=api --cov=config --cov-report=xml --cov-report=html --cov-report=term --cov-fail-under=80
     
     - name: Upload coverage to Codecov
       uses: codecov/codecov-action@v3
@@ -101,7 +103,9 @@ jobs:
       run: |
         pip install safety
     
-    - name: Check dependencies for security issues
+    - name: Check dependencies for security vulnerabilities
       run: |
-        safety check -r requirements.txt || true
+        echo "Checking for security vulnerabilities in dependencies..."
+        safety check -r requirements.txt --full-report
+      continue-on-error: false
 

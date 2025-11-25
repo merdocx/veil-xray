@@ -1,11 +1,12 @@
 """Основной файл API сервера"""
-from fastapi import FastAPI, Depends, HTTPException, status
+from fastapi import FastAPI, Depends, HTTPException, status, BackgroundTasks
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 from typing import List
 import time
 import logging
+import asyncio
 from datetime import datetime
 
 from api.database import get_db, Key, TrafficStats, init_db
@@ -59,11 +60,65 @@ def verify_token(credentials: HTTPAuthorizationCredentials = Depends(security)):
     return credentials.credentials
 
 
+async def sync_all_traffic_stats():
+    """Фоновая задача для синхронизации статистики всех ключей"""
+    while True:
+        try:
+            await asyncio.sleep(60)  # Обновление каждую минуту
+            
+            db: Session = next(get_db())
+            try:
+                keys = db.query(Key).filter(Key.is_active == 1).all()
+                
+                for key in keys:
+                    try:
+                        email = f"user_{key.id}_{key.uuid[:8]}"
+                        xray_stats = await xray_client.get_user_stats(email)
+                        
+                        upload = xray_stats.get("upload", 0)
+                        download = xray_stats.get("download", 0)
+                        
+                        traffic_stat = db.query(TrafficStats).filter(
+                            TrafficStats.key_id == key.id
+                        ).order_by(TrafficStats.updated_at.desc()).first()
+                        
+                        if traffic_stat:
+                            if traffic_stat.upload != upload or traffic_stat.download != download:
+                                traffic_stat.upload = upload
+                                traffic_stat.download = download
+                                traffic_stat.updated_at = int(time.time())
+                                logger.info(f"Auto-updated stats for key {key.id}: upload={upload}, download={download}")
+                        else:
+                            traffic_stat = TrafficStats(
+                                key_id=key.id,
+                                upload=upload,
+                                download=download,
+                                updated_at=int(time.time())
+                            )
+                            db.add(traffic_stat)
+                            logger.info(f"Auto-created stats for key {key.id}")
+                        
+                        db.commit()
+                    except Exception as e:
+                        logger.error(f"Error syncing stats for key {key.id}: {e}")
+                        db.rollback()
+            finally:
+                db.close()
+                
+        except Exception as e:
+            logger.error(f"Error in background traffic sync: {e}")
+
+
 @app.on_event("startup")
 async def startup_event():
     """Инициализация при запуске"""
     logger.info("Initializing database...")
     init_db()
+    
+    # Запускаем фоновую задачу для синхронизации статистики
+    asyncio.create_task(sync_all_traffic_stats())
+    logger.info("Background traffic sync task started")
+    
     logger.info("API server started")
 
 
@@ -414,6 +469,69 @@ async def get_key(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to get key: {str(e)}"
+        )
+
+
+@app.post("/api/traffic/sync", tags=["Traffic"])
+async def sync_all_traffic(
+    background_tasks: BackgroundTasks,
+    token: str = Depends(verify_token),
+    db: Session = Depends(get_db)
+):
+    """
+    Ручная синхронизация статистики трафика для всех активных ключей
+    """
+    try:
+        keys = db.query(Key).filter(Key.is_active == 1).all()
+        
+        updated_count = 0
+        error_count = 0
+        
+        for key in keys:
+            try:
+                email = f"user_{key.id}_{key.uuid[:8]}"
+                xray_stats = await xray_client.get_user_stats(email)
+                
+                upload = xray_stats.get("upload", 0)
+                download = xray_stats.get("download", 0)
+                
+                traffic_stat = db.query(TrafficStats).filter(
+                    TrafficStats.key_id == key.id
+                ).order_by(TrafficStats.updated_at.desc()).first()
+                
+                if traffic_stat:
+                    traffic_stat.upload = upload
+                    traffic_stat.download = download
+                    traffic_stat.updated_at = int(time.time())
+                else:
+                    traffic_stat = TrafficStats(
+                        key_id=key.id,
+                        upload=upload,
+                        download=download,
+                        updated_at=int(time.time())
+                    )
+                    db.add(traffic_stat)
+                
+                updated_count += 1
+            except Exception as e:
+                error_count += 1
+                logger.error(f"Error syncing stats for key {key.id}: {e}")
+        
+        db.commit()
+        
+        return {
+            "success": True,
+            "message": f"Synced {updated_count} keys, {error_count} errors",
+            "updated": updated_count,
+            "errors": error_count
+        }
+        
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Error syncing all traffic: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to sync traffic: {str(e)}"
         )
 
 

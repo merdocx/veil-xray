@@ -1,6 +1,7 @@
 """Клиент для работы с Xray API"""
 import httpx
 import json
+import subprocess
 from typing import Dict, Any, Optional
 from config.settings import settings
 import logging
@@ -81,7 +82,7 @@ class XrayClient:
     
     async def get_stats(self, email: Optional[str] = None) -> Dict[str, Any]:
         """
-        Получение статистики трафика из Xray
+        Получение статистики трафика из Xray через CLI команду
         
         Args:
             email: Email пользователя (опционально, если None - статистика всех пользователей)
@@ -90,19 +91,41 @@ class XrayClient:
             Словарь со статистикой
         """
         try:
-            async with httpx.AsyncClient(timeout=self.timeout) as client:
-                url = f"{self.base_url}/api/v1/stats"
-                if email:
-                    url += f"?email={email}"
-                
-                response = await client.get(url)
-                
-                if response.status_code == 200:
-                    return response.json()
-                else:
-                    logger.error(f"Failed to get stats: {response.status_code} - {response.text}")
-                    return {}
+            # Используем встроенную CLI команду Xray для получения статистики
+            # Формат: xray api statsquery --server=127.0.0.1:10085 [--pattern="user>>>email>>>"]
+            server = f"{settings.xray_api_host}:{settings.xray_api_port}"
+            cmd = ["/usr/local/bin/xray", "api", "statsquery", f"--server={server}"]
+            
+            # Если указан email, фильтруем по паттерну
+            if email:
+                pattern = f"user>>>{email}>>>"
+                cmd.extend(["--pattern", pattern])
+            
+            result = subprocess.run(
+                cmd,
+                capture_output=True,
+                text=True,
+                timeout=5
+            )
+            
+            if result.returncode == 0 and result.stdout.strip():
+                try:
+                    stats_data = json.loads(result.stdout)
+                    return stats_data
+                except json.JSONDecodeError:
+                    # Если не JSON, возможно пустой ответ
+                    logger.warning(f"Empty or invalid JSON response from Xray API")
+                    return {"stat": []}
+            else:
+                logger.error(f"Failed to get stats: returncode={result.returncode}, stderr={result.stderr}")
+                return {}
                     
+        except subprocess.TimeoutExpired:
+            logger.error("Timeout getting stats from Xray")
+            return {}
+        except FileNotFoundError:
+            logger.error("Xray binary not found at /usr/local/bin/xray")
+            return {}
         except Exception as e:
             logger.error(f"Error getting stats from Xray: {e}")
             return {}
@@ -139,4 +162,5 @@ class XrayClient:
             "upload": upload,
             "download": download
         }
+
 

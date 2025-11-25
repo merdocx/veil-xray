@@ -53,3 +53,4 @@ def test_build_vless_link():
     assert fingerprint in link
     assert public_key in link
 
+
