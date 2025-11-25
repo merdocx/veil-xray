@@ -1,7 +1,9 @@
 """Основной файл API сервера"""
-from fastapi import FastAPI, Depends, HTTPException, status, BackgroundTasks
+from fastapi import FastAPI, Depends, HTTPException, status, BackgroundTasks, Request
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import RedirectResponse
+from starlette.middleware.base import BaseHTTPMiddleware
 from sqlalchemy.orm import Session
 from typing import List
 import time
@@ -16,6 +18,7 @@ from api.models import (
 )
 from api.xray_client import XrayClient
 from api.xray_config import XrayConfigManager
+from api.task_queue import config_task_queue, TaskType
 from api.utils import generate_uuid, generate_short_id, build_vless_link
 from config.settings import settings
 
@@ -32,6 +35,28 @@ app = FastAPI(
     description="API для управления VLESS+Reality VPN сервером",
     version="1.0.0"
 )
+
+# Middleware для принудительного HTTPS (если используется reverse proxy)
+class ForceHTTPSMiddleware(BaseHTTPMiddleware):
+    """Middleware для принудительного перенаправления HTTP -> HTTPS"""
+    
+    async def dispatch(self, request: Request, call_next):
+        # Проверяем заголовок X-Forwarded-Proto (устанавливается reverse proxy)
+        forwarded_proto = request.headers.get("X-Forwarded-Proto", "")
+        host = request.headers.get("Host", "")
+        
+        # Если запрос пришел по HTTP через reverse proxy, перенаправляем на HTTPS
+        if forwarded_proto == "http" and host:
+            url = request.url
+            https_url = url.replace(scheme="https")
+            return RedirectResponse(url=str(https_url), status_code=301)
+        
+        response = await call_next(request)
+        return response
+
+# Добавляем middleware для принудительного HTTPS (только если используется reverse proxy)
+# Раскомментируйте следующую строку, если хотите включить принудительное перенаправление на уровне приложения
+# app.add_middleware(ForceHTTPSMiddleware)
 
 # CORS middleware
 app.add_middleware(
@@ -58,6 +83,117 @@ def verify_token(credentials: HTTPAuthorizationCredentials = Depends(security)):
             detail="Invalid authentication token"
         )
     return credentials.credentials
+
+
+async def sync_users_with_xray():
+    """
+    Синхронизация пользователей из БД с Xray API при старте приложения
+    
+    Добавляет в Xray всех активных пользователей, которые есть в БД,
+    но отсутствуют в Xray (например, если Xray был перезапущен или API был недоступен).
+    Также обновляет конфигурационный файл для обеспечения консистентности.
+    """
+    logger.info("🔄 Starting synchronization of users with Xray API...")
+    
+    db: Session = next(get_db())
+    try:
+        # Получаем все активные ключи из БД
+        keys = db.query(Key).filter(Key.is_active == 1).all()
+        
+        if not keys:
+            logger.info("No active keys found in database. Nothing to sync.")
+            return
+        
+        logger.info(f"Found {len(keys)} active key(s) in database. Syncing with Xray...")
+        
+        # Проверяем доступность Xray API
+        xray_api_available = await xray_client.check_health()
+        
+        if not xray_api_available:
+            logger.warning(
+                "⚠️  Xray API is not available. Will sync config file only. "
+                "Users will be available after Xray restart."
+            )
+        
+        synced_api_count = 0
+        synced_config_count = 0
+        skipped_count = 0
+        error_count = 0
+        
+        for key in keys:
+            try:
+                email = f"user_{key.id}_{key.uuid[:8]}"
+                config_updated = False
+                api_updated = False
+                
+                # Сначала обновляем конфигурационный файл (всегда)
+                # Это гарантирует, что пользователь будет в конфиге даже если API недоступен
+                try:
+                    config_success = xray_config_manager.add_user_to_config(
+                        uuid=key.uuid,
+                        short_id=key.short_id,
+                        email=email
+                    )
+                    if config_success:
+                        config_updated = True
+                        synced_config_count += 1
+                        logger.debug(
+                            f"✅ Added user {key.id} (UUID: {key.uuid[:8]}...) "
+                            f"to Xray config file"
+                        )
+                except Exception as config_error:
+                    logger.warning(
+                        f"⚠️  Failed to add user {key.id} to config file: {config_error}"
+                    )
+                
+                # Затем пытаемся добавить через Xray API (если доступен)
+                if xray_api_available:
+                    try:
+                        api_success = await xray_client.add_user(
+                            uuid=key.uuid,
+                            email=email,
+                            flow="none"
+                        )
+                        
+                        if api_success:
+                            api_updated = True
+                            synced_api_count += 1
+                            logger.info(
+                                f"✅ Synced user {key.id} (UUID: {key.uuid[:8]}..., email: {email}) "
+                                f"to Xray API"
+                            )
+                        else:
+                            # Пользователь может уже существовать в Xray, это нормально
+                            logger.debug(
+                                f"⏭️  User {key.id} (UUID: {key.uuid[:8]}...) "
+                                f"may already exist in Xray API"
+                            )
+                    except Exception as api_error:
+                        logger.warning(
+                            f"⚠️  Failed to add user {key.id} to Xray API: {api_error}"
+                        )
+                
+                # Если ни API, ни конфиг не обновились, считаем пропущенным
+                if not config_updated and not api_updated:
+                    skipped_count += 1
+                    
+            except Exception as e:
+                error_count += 1
+                logger.error(
+                    f"❌ Error syncing user {key.id} (UUID: {key.uuid[:8]}...) "
+                    f"to Xray: {e}"
+                )
+        
+        logger.info(
+            f"🔄 User synchronization completed: "
+            f"{synced_api_count} synced via API, {synced_config_count} synced via config, "
+            f"{skipped_count} skipped, {error_count} errors"
+        )
+        
+    except Exception as e:
+        logger.error(f"❌ Error during user synchronization: {e}")
+    finally:
+        db.close()
 
 
 async def sync_all_traffic_stats():
@@ -112,14 +248,37 @@ async def sync_all_traffic_stats():
 @app.on_event("startup")
 async def startup_event():
     """Инициализация при запуске"""
-    logger.info("Initializing database...")
+    logger.info("🚀 Starting Veil Xray API server...")
+    
+    # Инициализация базы данных
+    logger.info("📦 Initializing database...")
     init_db()
+    logger.info("✅ Database initialized")
+    
+    # Запуск очереди задач для обработки конфигурации Xray
+    await config_task_queue.start()
+    logger.info("✅ Config task queue started")
+    
+    # Синхронизация пользователей с Xray API
+    await sync_users_with_xray()
     
     # Запускаем фоновую задачу для синхронизации статистики
     asyncio.create_task(sync_all_traffic_stats())
-    logger.info("Background traffic sync task started")
+    logger.info("✅ Background traffic sync task started")
     
-    logger.info("API server started")
+    logger.info("✅ API server started successfully")
+
+
+@app.on_event("shutdown")
+async def shutdown_event():
+    """Остановка при завершении работы"""
+    logger.info("🛑 Shutting down Veil Xray API server...")
+    
+    # Остановка очереди задач
+    await config_task_queue.stop()
+    logger.info("✅ Config task queue stopped")
+    
+    logger.info("✅ API server stopped")
 
 
 @app.get("/", tags=["Health"])
@@ -175,25 +334,44 @@ async def create_key(
         # Пытаемся добавить через Xray API (может не работать, если Xray не запущен)
         api_success = await xray_client.add_user(uuid_value, email)
         
-        # Гарантированно добавляем в конфигурационный файл
-        config_success = xray_config_manager.add_user_to_config(
-            uuid=uuid_value,
-            short_id=short_id,
-            email=email
-        )
-        
-        if not config_success:
-            logger.error(f"Failed to add user to Xray config file: {new_key.id}")
-            # Откатываем транзакцию, так как конфигурация не обновлена
-            db.rollback()
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="Failed to update Xray configuration"
+        # Добавляем задачу в очередь для последовательной обработки конфигурации
+        # Это гарантирует отсутствие race conditions при параллельных запросах
+        config_task_added = False
+        try:
+            await config_task_queue.add_task(
+                task_type=TaskType.ADD_USER,
+                uuid=uuid_value,
+                short_id=short_id,
+                email=email
             )
+            config_task_added = True
+            logger.debug(
+                f"📥 Added ADD_USER task to queue for key {new_key.id} "
+                f"(UUID: {uuid_value[:8]}...)"
+            )
+        except Exception as e:
+            logger.error(f"Failed to add task to queue: {e}")
+            # Если очередь недоступна, используем прямой вызов как fallback
+            config_success = xray_config_manager.add_user_to_config(
+                uuid=uuid_value,
+                short_id=short_id,
+                email=email
+            )
+            if not config_success:
+                logger.error(f"Failed to add user to Xray config file: {new_key.id}")
+                db.rollback()
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail="Failed to update Xray configuration"
+                )
         
         if not api_success:
-            logger.warning(f"Failed to add user to Xray via API, but config file updated: {new_key.id}")
-            # Это не критично, конфигурация обновлена в файле
+            logger.warning(
+                f"⚠️  Failed to add user {new_key.id} (UUID: {uuid_value[:8]}...) "
+                f"to Xray via API, but config task added to queue. "
+                f"User will be available after Xray restart or will be synced automatically."
+            )
+            # Это не критично, задача добавлена в очередь
         
         # Инициализация статистики трафика
         traffic_stat = TrafficStats(
@@ -252,14 +430,31 @@ async def delete_key(
         # Пытаемся удалить через Xray API
         await xray_client.remove_user(email)
         
-        # Гарантированно удаляем из конфигурационного файла
-        config_success = xray_config_manager.remove_user_from_config(
-            uuid=key.uuid,
-            short_id=key.short_id
-        )
-        
-        if not config_success:
-            logger.warning(f"Failed to remove user from Xray config file: {key_id}")
+        # Добавляем задачу в очередь для последовательной обработки конфигурации
+        # Это гарантирует отсутствие race conditions при параллельных запросах
+        try:
+            await config_task_queue.add_task(
+                task_type=TaskType.REMOVE_USER,
+                uuid=key.uuid,
+                short_id=key.short_id,
+                email=email
+            )
+            logger.debug(
+                f"📥 Added REMOVE_USER task to queue for key {key_id} "
+                f"(UUID: {key.uuid[:8]}...)"
+            )
+        except Exception as e:
+            logger.error(f"Failed to add task to queue: {e}")
+            # Если очередь недоступна, используем прямой вызов как fallback
+            config_success = xray_config_manager.remove_user_from_config(
+                uuid=key.uuid,
+                short_id=key.short_id
+            )
+            if not config_success:
+                logger.warning(
+                    f"⚠️  Failed to remove user {key_id} (UUID: {key.uuid[:8]}...) "
+                    f"from Xray config file. User removed from database but may still exist in config."
+                )
             # Продолжаем удаление из БД, даже если конфигурация не обновлена
         
         # Удаление из базы данных (каскадное удаление статистики)

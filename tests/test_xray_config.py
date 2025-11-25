@@ -4,7 +4,7 @@ import json
 import tempfile
 import os
 from pathlib import Path
-from unittest.mock import patch, mock_open
+from unittest.mock import patch, mock_open, MagicMock
 from api.xray_config import XrayConfigManager
 
 
@@ -48,7 +48,11 @@ def temp_config_file(sample_config):
 @pytest.fixture
 def config_manager(temp_config_file):
     """Создание менеджера конфигурации с временным файлом"""
-    return XrayConfigManager(config_path=temp_config_file)
+    # Используем несуществующий путь к xray для тестов, чтобы пропустить проверку
+    return XrayConfigManager(
+        config_path=temp_config_file,
+        xray_binary_path="/nonexistent/xray"
+    )
 
 
 def test_load_config(config_manager, sample_config):
@@ -67,9 +71,95 @@ def test_load_config_not_found():
 
 def test_save_config(config_manager, sample_config):
     """Тест сохранения конфигурации"""
-    result = config_manager.save_config(sample_config)
+    # Валидация и тест пропускаются, так как xray не найден
+    result = config_manager.save_config(sample_config, validate=True, test=True)
     assert result is True
     assert os.path.exists(config_manager.config_path)
+
+
+def test_save_config_with_validation(config_manager, sample_config):
+    """Тест сохранения конфигурации с валидацией"""
+    result = config_manager.save_config(sample_config, validate=True, test=False)
+    assert result is True
+
+
+def test_save_config_invalid_json(config_manager):
+    """Тест сохранения невалидной JSON конфигурации"""
+    invalid_config = "not a dict"
+    result = config_manager.save_config(invalid_config, validate=True, test=False)
+    assert result is False
+
+
+def test_validate_json_valid(config_manager, sample_config):
+    """Тест валидации валидной конфигурации"""
+    is_valid, error_msg = config_manager.validate_json(sample_config)
+    assert is_valid is True
+    assert error_msg is None
+
+
+def test_validate_json_invalid_type(config_manager):
+    """Тест валидации невалидного типа"""
+    is_valid, error_msg = config_manager.validate_json("not a dict")
+    assert is_valid is False
+    assert error_msg is not None
+
+
+def test_validate_json_missing_sections(config_manager):
+    """Тест валидации конфигурации без обязательных секций"""
+    invalid_config = {"some": "data"}
+    is_valid, error_msg = config_manager.validate_json(invalid_config)
+    assert is_valid is False
+    assert error_msg is not None
+
+
+@patch('subprocess.run')
+@patch('pathlib.Path.exists')
+def test_test_config_success(mock_exists, mock_subprocess, config_manager, sample_config):
+    """Тест успешной проверки конфигурации через xray"""
+    mock_exists.return_value = True
+    mock_result = MagicMock()
+    mock_result.returncode = 0
+    mock_result.stderr = ""
+    mock_result.stdout = ""
+    mock_subprocess.return_value = mock_result
+    
+    # Обновляем путь к xray для этого теста
+    config_manager.xray_binary_path = "/usr/local/bin/xray"
+    
+    is_valid, error_msg = config_manager.test_config(sample_config)
+    assert is_valid is True
+    assert error_msg is None
+    mock_subprocess.assert_called_once()
+
+
+@patch('subprocess.run')
+@patch('pathlib.Path.exists')
+def test_test_config_failure(mock_exists, mock_subprocess, config_manager, sample_config):
+    """Тест неудачной проверки конфигурации через xray"""
+    mock_exists.return_value = True
+    mock_result = MagicMock()
+    mock_result.returncode = 1
+    mock_result.stderr = "Configuration error"
+    mock_result.stdout = ""
+    mock_subprocess.return_value = mock_result
+    
+    # Обновляем путь к xray для этого теста
+    config_manager.xray_binary_path = "/usr/local/bin/xray"
+    
+    is_valid, error_msg = config_manager.test_config(sample_config)
+    assert is_valid is False
+    assert error_msg is not None
+    assert "Configuration error" in error_msg
+
+
+@patch('pathlib.Path.exists')
+def test_test_config_xray_not_found(mock_exists, config_manager, sample_config):
+    """Тест пропуска проверки когда xray не найден"""
+    mock_exists.return_value = False
+    
+    is_valid, error_msg = config_manager.test_config(sample_config)
+    assert is_valid is True  # Пропускаем проверку
+    assert error_msg is None
 
 
 def test_add_user_to_config(config_manager, sample_config):

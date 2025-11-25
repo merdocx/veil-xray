@@ -185,3 +185,5 @@ async def test_get_user_stats_empty(xray_client):
         assert result["upload"] == 0
         assert result["download"] == 0
 
+
+

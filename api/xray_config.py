@@ -1,8 +1,10 @@
 """Управление конфигурацией Xray"""
 import json
 import logging
+import subprocess
+import tempfile
 from pathlib import Path
-from typing import List, Optional
+from typing import List, Optional, Tuple
 from config.settings import settings
 
 logger = logging.getLogger(__name__)
@@ -11,9 +13,10 @@ logger = logging.getLogger(__name__)
 class XrayConfigManager:
     """Менеджер для управления конфигурацией Xray"""
     
-    def __init__(self, config_path: Optional[str] = None):
+    def __init__(self, config_path: Optional[str] = None, xray_binary_path: Optional[str] = None):
         self.config_path = config_path or settings.xray_config_path
         self.config_file = Path(self.config_path)
+        self.xray_binary_path = xray_binary_path or "/usr/local/bin/xray"
     
     def load_config(self) -> dict:
         """Загрузка конфигурации Xray из файла"""
@@ -24,23 +27,133 @@ class XrayConfigManager:
             logger.error(f"Error loading Xray config: {e}")
             raise
     
-    def save_config(self, config: dict) -> bool:
-        """Сохранение конфигурации Xray в файл"""
+    def validate_json(self, config: dict) -> Tuple[bool, Optional[str]]:
+        """
+        Валидация JSON структуры конфигурации
+        
+        Args:
+            config: Словарь с конфигурацией
+            
+        Returns:
+            Кортеж (is_valid, error_message)
+        """
         try:
+            # Проверяем, что это словарь
+            if not isinstance(config, dict):
+                return False, "Configuration must be a dictionary"
+            
+            # Проверяем базовую структуру Xray конфигурации
+            if 'inbounds' not in config and 'outbounds' not in config:
+                return False, "Configuration must contain 'inbounds' or 'outbounds'"
+            
+            # Пытаемся сериализовать в JSON для проверки валидности
+            json.dumps(config)
+            
+            return True, None
+        except (TypeError, ValueError) as e:
+            return False, f"Invalid JSON structure: {e}"
+        except Exception as e:
+            return False, f"Validation error: {e}"
+    
+    def test_config(self, config: dict) -> Tuple[bool, Optional[str]]:
+        """
+        Проверка конфигурации через xray -test -config
+        
+        Args:
+            config: Словарь с конфигурацией для проверки
+            
+        Returns:
+            Кортеж (is_valid, error_message)
+        """
+        # Проверяем наличие бинарника xray
+        xray_binary = Path(self.xray_binary_path)
+        if not xray_binary.exists():
+            logger.warning(f"⚠️  Xray binary not found at {self.xray_binary_path}, skipping config test")
+            return True, None  # Пропускаем проверку, если xray не установлен
+        
+        try:
+            # Создаем временный файл с конфигурацией
+            with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False) as tmp_file:
+                json.dump(config, tmp_file, indent=2, ensure_ascii=False)
+                tmp_config_path = tmp_file.name
+            
+            try:
+                # Запускаем xray -test -config
+                result = subprocess.run(
+                    [self.xray_binary_path, "-test", "-config", tmp_config_path],
+                    capture_output=True,
+                    text=True,
+                    timeout=10
+                )
+                
+                if result.returncode == 0:
+                    logger.debug("✅ Configuration test passed")
+                    return True, None
+                else:
+                    error_msg = result.stderr or result.stdout or "Unknown error"
+                    logger.error(f"❌ Configuration test failed: {error_msg}")
+                    return False, error_msg
+            finally:
+                # Удаляем временный файл
+                Path(tmp_config_path).unlink(missing_ok=True)
+                
+        except subprocess.TimeoutExpired:
+            logger.error("❌ Configuration test timed out")
+            return False, "Configuration test timed out"
+        except FileNotFoundError:
+            logger.warning(f"⚠️  Xray binary not found at {self.xray_binary_path}, skipping config test")
+            return True, None  # Пропускаем проверку, если xray не установлен
+        except Exception as e:
+            logger.error(f"❌ Error testing configuration: {e}")
+            return False, str(e)
+    
+    def save_config(self, config: dict, validate: bool = True, test: bool = True) -> bool:
+        """
+        Сохранение конфигурации Xray в файл с валидацией
+        
+        Args:
+            config: Словарь с конфигурацией
+            validate: Выполнять валидацию JSON перед сохранением
+            test: Выполнять проверку через xray -test -config перед сохранением
+            
+        Returns:
+            True если успешно, False в противном случае
+        """
+        try:
+            # Валидация JSON структуры
+            if validate:
+                is_valid, error_msg = self.validate_json(config)
+                if not is_valid:
+                    logger.error(f"❌ JSON validation failed: {error_msg}")
+                    return False
+                logger.debug("✅ JSON validation passed")
+            
+            # Проверка конфигурации через xray -test -config
+            if test:
+                is_valid, error_msg = self.test_config(config)
+                if not is_valid:
+                    logger.error(f"❌ Configuration test failed: {error_msg}")
+                    return False
+                logger.debug("✅ Configuration test passed")
+            
             # Создаем резервную копию
             backup_path = self.config_file.with_suffix('.json.backup')
             if self.config_file.exists():
                 import shutil
                 shutil.copy2(self.config_file, backup_path)
+                logger.debug(f"Backup created: {backup_path}")
             
             # Сохраняем новую конфигурацию
             with open(self.config_file, 'w', encoding='utf-8') as f:
                 json.dump(config, f, indent=2, ensure_ascii=False)
             
-            logger.info(f"Xray config saved to {self.config_path}")
+            logger.info(f"✅ Xray config saved to {self.config_path}")
             return True
+        except json.JSONEncodeError as e:
+            logger.error(f"❌ JSON encoding error: {e}")
+            return False
         except Exception as e:
-            logger.error(f"Error saving Xray config: {e}")
+            logger.error(f"❌ Error saving Xray config: {e}")
             return False
     
     def add_user_to_config(self, uuid: str, short_id: str, email: Optional[str] = None) -> bool:

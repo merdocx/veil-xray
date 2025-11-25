@@ -73,3 +73,6 @@ coverage.xml
 htmlcov/
 *.cover
 
+# Bash history
+.bash_history
+
