@@ -12,12 +12,15 @@ from api.main import app, xray_client
 from config.settings import settings
 
 
-@pytest.fixture(scope="function")
+@pytest.fixture(scope="function", autouse=True)
 def test_db(monkeypatch):
-    """Создание тестовой базы данных"""
+    """Создание тестовой базы данных (автоматически для всех тестов)"""
     # Создание временной базы данных в памяти
     test_db_url = "sqlite:///:memory:"
     engine = create_engine(test_db_url, connect_args={"check_same_thread": False})
+    
+    # Создаем таблицы ПЕРЕД созданием SessionLocal
+    Base.metadata.create_all(bind=engine)
     
     # Переопределяем database_url в settings для тестов
     monkeypatch.setattr('config.settings.settings.database_url', test_db_url)
@@ -32,9 +35,6 @@ def test_db(monkeypatch):
         Base.metadata.create_all(bind=engine)
     monkeypatch.setattr('api.database.init_db', test_init_db)
     
-    # Создаем таблицы
-    Base.metadata.create_all(bind=engine)
-    
     # Переопределяем get_db чтобы использовать наш SessionLocal
     def override_get_db():
         try:
@@ -44,9 +44,6 @@ def test_db(monkeypatch):
             db.close()
     
     app.dependency_overrides[get_db] = override_get_db
-    
-    # Также переопределяем get_db в модуле для надежности
-    monkeypatch.setattr('api.database.get_db', override_get_db)
     
     yield engine
     
