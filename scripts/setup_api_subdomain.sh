@@ -3,8 +3,8 @@
 
 set -e
 
-SUBDOMAIN="api.veil-bear.ru"
-EMAIL="admin@veil-bear.ru"
+SUBDOMAIN="api.veil-bear.ru"  # Замените на ваш поддомен
+EMAIL="your-email@example.com"  # Замените на ваш email для Let's Encrypt
 SERVER_IP=$(curl -s ifconfig.me || curl -s icanhazip.com)
 
 echo "🔧 Настройка поддомена $SUBDOMAIN для Veil Xray API"

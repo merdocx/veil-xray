@@ -68,7 +68,7 @@ curl https://your-domain.com/
 - **Формат:** Строка (минимум 32 символа)
 - **Использование:** Передается в заголовке `Authorization: Bearer YOUR_SECRET_KEY`
 - **Где найти:** Значение `API_SECRET_KEY` из конфигурации сервера (файл `.env` или переменная окружения)
-- **Пример:** `a9lxDECFHDLI67OcvA9mTTTPyaesHxA2BlcUCTQhoEQ`
+- **Пример:** `your-api-secret-key-minimum-32-characters-long`
 - **Важно:** Для V2Ray/Xray это обязательное поле. Без правильного ключа все запросы будут возвращать `401 Unauthorized`
 
 **Как получить:**
