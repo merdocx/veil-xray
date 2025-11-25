@@ -30,19 +30,19 @@
 
 1. **Прямой IP с HTTP (рекомендуется, если домен за CDN):**
    - Формат: `http://IP-адрес:8000`
-   - Пример: `http://46.151.29.228:8000`
+   - Пример: `http://YOUR_SERVER_IP:8000` (замените `YOUR_SERVER_IP` на IP вашего сервера)
    - ✅ Работает напрямую, обходит CDN
    - ⚠️ HTTP небезопасен (данные передаются в открытом виде)
 
 2. **Поддомен без CDN (рекомендуется для production):**
    - Формат: `https://api.your-domain.com` или `http://api.your-domain.com:8000`
-   - Пример: `https://api.veil-bear.ru` или `http://api.veil-bear.ru:8000`
+   - Пример: `https://api.your-domain.com` или `http://api.your-domain.com:8000`
    - ✅ Безопасно (HTTPS) и обходит CDN
    - ⚠️ Требует настройки DNS записи для поддомена
 
 3. **Домен без CDN (если CDN отключен):**
    - Формат: `https://your-domain.com` или `http://your-domain.com:8000`
-   - Пример: `https://veil-bear.ru` или `http://veil-bear.ru:8000`
+   - Пример: `https://your-domain.com` или `http://your-domain.com:8000`
    - ⚠️ Может не работать, если домен проходит через CDN
 
 **Примечания:**
@@ -91,24 +91,22 @@ curl https://your-domain.com/
 
 ---
 
-### Пример конфигурации для текущего сервера
-
-**Для сервера с доменом `veil-bear.ru` (проходящим через CDN Akamai):**
+### Пример конфигурации
 
 **Вариант 1: Поддомен с HTTPS (рекомендуется):**
 ```json
 {
-  "api_url": "https://api.veil-bear.ru:8443",
-  "api_key": "a9lxDECFHDLI67OcvA9mTTTPyaesHxA2BlcUCTQhoEQ",
+  "api_url": "https://api.your-domain.com",
+  "api_key": "YOUR_API_SECRET_KEY",
   "v2ray_path": "/usr/local/bin/xray"
 }
 ```
 
-**Вариант 2: Прямой IP с HTTP (временное решение):**
+**Вариант 2: Прямой IP с HTTP (временное решение, если домен за CDN):**
 ```json
 {
-  "api_url": "http://46.151.29.228:8000",
-  "api_key": "a9lxDECFHDLI67OcvA9mTTTPyaesHxA2BlcUCTQhoEQ",
+  "api_url": "http://YOUR_SERVER_IP:8000",
+  "api_key": "YOUR_API_SECRET_KEY",
   "v2ray_path": "/usr/local/bin/xray"
 }
 ```
@@ -116,22 +114,24 @@ curl https://your-domain.com/
 **Проверка работоспособности:**
 ```bash
 # Проверка доступности API через поддомен (HTTPS)
-curl -k https://api.veil-bear.ru:8443/
+curl -k https://api.your-domain.com/
 
 # Проверка доступности API через прямой IP (HTTP)
-curl http://46.151.29.228:8000/
+curl http://YOUR_SERVER_IP:8000/
 
 # Создание ключа через API (HTTPS поддомен)
-curl -X POST "https://api.veil-bear.ru:8443/api/keys" \
-  -H "Authorization: Bearer a9lxDECFHDLI67OcvA9mTTTPyaesHxA2BlcUCTQhoEQ" \
+curl -X POST "https://api.your-domain.com/api/keys" \
+  -H "Authorization: Bearer YOUR_API_SECRET_KEY" \
   -H "Content-Type: application/json" \
   -d '{"name": "test_key"}'
 ```
 
 **⚠️ Важно:** 
-- Поддомен `api.veil-bear.ru:8443` использует HTTPS на порту 8443 (порт 443 занят Xray для VPN)
-- Прямой IP `46.151.29.228:8000` использует HTTP (менее безопасно, но работает)
+- Замените `your-domain.com` на ваш домен
+- Замените `YOUR_SERVER_IP` на IP адрес вашего сервера
+- Замените `YOUR_API_SECRET_KEY` на ваш API ключ из `.env` файла
 - Рекомендуется использовать поддомен с HTTPS для production
+- Если порт 443 занят Xray для VPN, используйте альтернативный порт (например, 8443)
 
 ---
 
@@ -400,7 +400,7 @@ Authorization: Bearer YOUR_SECRET_KEY
 ```json
 {
   "key_id": 1,
-  "vless_link": "vless://123e4567-e89b-12d3-a456-426614174000@veil-bear.ru:443?type=tcp&security=reality&sni=microsoft.com&fp=chrome&pbk=public_key_here&sid=abcd1234&spx=%2F&flow=none#user_name"
+  "vless_link": "vless://123e4567-e89b-12d3-a456-426614174000@your-domain.com:443?type=tcp&security=reality&sni=microsoft.com&fp=chrome&pbk=public_key_here&sid=abcd1234&spx=%2F&flow=none#user_name"
 }
 ```
 

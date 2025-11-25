@@ -16,7 +16,7 @@
 - Python 3.10+
 - Xray-core (последняя стабильная версия)
 - Linux (Ubuntu/Debian)
-- Домен с настроенным DNS (veil-bear.ru)
+- Домен с настроенным DNS (например, your-domain.com)
 
 ## 🛠 Установка
 
@@ -28,6 +28,23 @@ cd veil-xray
 ```
 
 ### 2. Установка зависимостей
+
+**Рекомендуется использовать виртуальное окружение:**
+
+```bash
+# Создание виртуального окружения
+python3 -m venv venv
+
+# Активация виртуального окружения
+source venv/bin/activate  # Linux/Mac
+# или
+venv\Scripts\activate  # Windows
+
+# Установка зависимостей
+pip install -r requirements.txt
+```
+
+**Или без виртуального окружения:**
 
 ```bash
 pip install -r requirements.txt
@@ -88,6 +105,14 @@ systemctl enable xray
 
 ### 7. Запуск API сервера
 
+**Если используете виртуальное окружение, активируйте его:**
+
+```bash
+source venv/bin/activate  # Linux/Mac
+```
+
+**Запуск API сервера:**
+
 ```bash
 python -m api.main
 ```
@@ -98,23 +123,29 @@ python -m api.main
 uvicorn api.main:app --host 0.0.0.0 --port 8000
 ```
 
-Для production используйте systemd или supervisor:
+Для production используйте systemd:
 
-```ini
-[Unit]
-Description=Veil Xray API
-After=network.target
+```bash
+# Скопировать unit файл
+sudo cp scripts/veil-xray-api.service /etc/systemd/system/
 
-[Service]
-Type=simple
-User=www-data
-WorkingDirectory=/path/to/veil-xray
-ExecStart=/usr/bin/python3 -m uvicorn api.main:app --host 0.0.0.0 --port 8000
-Restart=always
+# Отредактировать пути в файле (если необходимо)
+sudo nano /etc/systemd/system/veil-xray-api.service
 
-[Install]
-WantedBy=multi-user.target
+# Перезагрузить systemd
+sudo systemctl daemon-reload
+
+# Запустить сервис
+sudo systemctl start veil-xray-api
+
+# Включить автозапуск
+sudo systemctl enable veil-xray-api
+
+# Проверить статус
+sudo systemctl status veil-xray-api
 ```
+
+**Примечание:** Перед использованием systemd service файла убедитесь, что пути в файле `scripts/veil-xray-api.service` соответствуют вашей установке (путь к Python, путь к проекту, пользователь).
 
 ### 8. Настройка HTTPS (рекомендуется для production)
 
