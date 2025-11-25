@@ -41,8 +41,11 @@ def generate_reality_keys():
     )
 
     # Кодирование в base64
+    # Для приватного ключа используем стандартный base64 (для конфигурации Xray)
     private_key_b64 = base64.b64encode(private_bytes).decode("utf-8")
-    public_key_b64 = base64.b64encode(public_bytes).decode("utf-8")
+    # Для публичного ключа используем URL-safe base64 (для VLESS ссылок)
+    # Это необходимо, так как ключ будет использоваться в URL параметрах
+    public_key_b64 = base64.urlsafe_b64encode(public_bytes).decode("utf-8").rstrip("=")
 
     return public_key_b64, private_key_b64
 

@@ -30,6 +30,10 @@ class Settings(BaseSettings):
     reality_public_key: Optional[str] = None
     reality_private_key: Optional[str] = None
 
+    # Общий short_id для всех пользователей (используется вместо индивидуальных)
+    # Это позволяет избежать перезагрузки Xray при создании/удалении ключей
+    reality_common_short_id: str = "7bb45050"  # Можно изменить через .env
+
     # Домен
     domain: str = "veil-bear.ru"
 

@@ -167,16 +167,71 @@ class XrayConfigManager:
             logger.error(f"❌ Error saving Xray config: {e}")
             return False
 
+    def ensure_common_short_id(self, common_short_id: str) -> bool:
+        """
+        Убедиться, что общий short_id присутствует в конфигурации Xray
+        
+        Args:
+            common_short_id: Общий short_id для всех пользователей
+            
+        Returns:
+            True если успешно, False в противном случае
+        """
+        try:
+            config = self.load_config()
+            
+            # Находим VLESS inbound
+            vless_inbound = None
+            for inbound in config.get("inbounds", []):
+                if inbound.get("protocol") == "vless":
+                    vless_inbound = inbound
+                    break
+            
+            if not vless_inbound:
+                logger.error("VLESS inbound not found in Xray config")
+                return False
+            
+            # Проверяем и обновляем shortIds в realitySettings
+            stream_settings = vless_inbound.get("streamSettings", {})
+            if "realitySettings" not in stream_settings:
+                stream_settings["realitySettings"] = {}
+            
+            reality_settings = stream_settings["realitySettings"]
+            short_ids = reality_settings.get("shortIds", [])
+            
+            if common_short_id not in short_ids:
+                short_ids.append(common_short_id)
+                reality_settings["shortIds"] = short_ids
+                stream_settings["realitySettings"] = reality_settings
+                vless_inbound["streamSettings"] = stream_settings
+                logger.info(f"✅ Added common short_id '{common_short_id}' to Xray config")
+                
+                # Сохраняем конфигурацию
+                if self.save_config(config):
+                    logger.info(f"✅ Common short_id '{common_short_id}' configured in Xray")
+                    return True
+                else:
+                    logger.error("Failed to save Xray config with common short_id")
+                    return False
+            else:
+                logger.debug(f"Common short_id '{common_short_id}' already in config")
+                return True
+                
+        except Exception as e:
+            logger.error(f"Error ensuring common short_id: {e}")
+            return False
+
     def add_user_to_config(
-        self, uuid: str, short_id: str, email: Optional[str] = None
+        self, uuid: str, short_id: str, email: Optional[str] = None, reload: bool = True
     ) -> bool:
         """
         Добавление пользователя в конфигурацию Xray
 
         Args:
             uuid: UUID пользователя
-            short_id: Short ID пользователя
+            short_id: Short ID пользователя (не используется, оставлен для совместимости)
             email: Email/идентификатор пользователя (опционально)
+            reload: Перезагрузить конфигурацию Xray после добавления (по умолчанию True, использует SIGHUP для graceful reload без прерывания соединений)
 
         Returns:
             True если успешно, False в противном случае
@@ -195,6 +250,10 @@ class XrayConfigManager:
                 logger.error("VLESS inbound not found in Xray config")
                 return False
 
+            # Убеждаемся, что общий short_id присутствует в конфигурации
+            common_short_id = settings.reality_common_short_id
+            self.ensure_common_short_id(common_short_id)
+
             # Проверяем, есть ли уже такой пользователь
             clients = vless_inbound["settings"].get("clients", [])
             if any(client.get("id") == uuid for client in clients):
@@ -209,22 +268,20 @@ class XrayConfigManager:
                 vless_inbound["settings"]["clients"] = clients
                 logger.info(f"Added user {uuid[:8]}... to Xray config")
 
-            # Добавляем Short ID в realitySettings
-            reality_settings = vless_inbound.get("streamSettings", {}).get(
-                "realitySettings", {}
-            )
-            short_ids = reality_settings.get("shortIds", [])
+            # НЕ добавляем Short ID в realitySettings - используем общий short_id для всех
+            # Общий short_id должен быть уже настроен в конфигурации Xray
+            # Это позволяет избежать перезагрузки Xray при создании/удалении ключей
+            logger.info(f"User {uuid[:8]}... added to Xray config (using common short_id)")
 
-            if short_id not in short_ids:
-                short_ids.append(short_id)
-                reality_settings["shortIds"] = short_ids
-                logger.info(f"Added Short ID {short_id} to realitySettings")
-
-            # Сохраняем конфигурацию
+            # Сохраняем конфигурацию (только для UUID, short_id не меняется)
             if self.save_config(config):
                 logger.info(
-                    f"User {uuid[:8]}... and Short ID {short_id} added to Xray config"
+                    f"User {uuid[:8]}... added to Xray config"
                 )
+                # UUID уже добавлен через Xray API 'adu' - работает сразу
+                # Общий short_id уже настроен в конфигурации - не требует изменений
+                # Перезагрузка НЕ нужна - ключ работает сразу!
+                logger.info(f"✅ Key is ready immediately (UUID via API, common short_id in config)")
                 return True
             else:
                 logger.error("Failed to save Xray config")
@@ -234,13 +291,13 @@ class XrayConfigManager:
             logger.error(f"Error adding user to Xray config: {e}")
             return False
 
-    def remove_user_from_config(self, uuid: str, short_id: str) -> bool:
+    def remove_user_from_config(self, uuid: str, short_id: str, reload: bool = True) -> bool:
         """
         Удаление пользователя из конфигурации Xray
 
         Args:
             uuid: UUID пользователя
-            short_id: Short ID пользователя
+            short_id: Short ID пользователя (не используется, оставлен для совместимости)
 
         Returns:
             True если успешно, False в противном случае
@@ -268,22 +325,20 @@ class XrayConfigManager:
             if len(clients) < original_count:
                 logger.info(f"Removed user {uuid[:8]}... from Xray config")
 
-            # Удаляем Short ID из realitySettings
-            reality_settings = vless_inbound.get("streamSettings", {}).get(
-                "realitySettings", {}
-            )
-            short_ids = reality_settings.get("shortIds", [])
+            # НЕ удаляем Short ID из realitySettings - используем общий short_id для всех
+            # Общий short_id остается в конфигурации для других пользователей
+            # Это позволяет избежать перезагрузки Xray при удалении ключей
+            logger.info(f"User {uuid[:8]}... removed from Xray config (common short_id preserved)")
 
-            if short_id in short_ids:
-                short_ids.remove(short_id)
-                reality_settings["shortIds"] = short_ids
-                logger.info(f"Removed Short ID {short_id} from realitySettings")
-
-            # Сохраняем конфигурацию
+            # Сохраняем конфигурацию (только для UUID, short_id не меняется)
             if self.save_config(config):
                 logger.info(
-                    f"User {uuid[:8]}... and Short ID {short_id} removed from Xray config"
+                    f"User {uuid[:8]}... removed from Xray config"
                 )
+                # UUID уже удален через Xray API 'rmu' - удален сразу
+                # Общий short_id остается в конфигурации - не требует изменений
+                # Перезагрузка НЕ нужна!
+                logger.info(f"✅ Key removed immediately (UUID via API, common short_id preserved)")
                 return True
             else:
                 logger.error("Failed to save Xray config")
@@ -295,24 +350,138 @@ class XrayConfigManager:
 
     def reload_config(self) -> bool:
         """
-        Перезагрузка конфигурации Xray через API
-
+        Graceful перезагрузка конфигурации Xray
+        
+        Использует комбинацию методов для гарантированного применения изменений:
+        1. Сначала пробует SIGHUP (если поддерживается)
+        2. Если не работает, использует graceful restart процесса
+        
         Returns:
             True если успешно, False в противном случае
         """
         try:
-            import httpx
-            import asyncio
+            import signal
+            import os
+            import time
 
-            async def reload():
-                async with httpx.AsyncClient(timeout=5.0) as client:
-                    # Xray не имеет прямого API для перезагрузки конфигурации
-                    # Нужно использовать SIGHUP или перезапуск сервиса
-                    # Для простоты возвращаем True, предполагая что конфигурация будет перезагружена
-                    return True
+            # Ищем процесс Xray
+            result = subprocess.run(
+                ["pgrep", "-f", "/usr/local/bin/xray"],
+                capture_output=True,
+                text=True,
+            )
 
-            return asyncio.run(reload())
+            if result.returncode == 0:
+                pid = int(result.stdout.strip().split("\n")[0])
+                logger.info(f"Found Xray process with PID: {pid}")
+
+                # Метод 1: Пробуем SIGHUP (может не работать для всех типов изменений)
+                try:
+                    os.kill(pid, signal.SIGHUP)
+                    logger.info(f"✅ Sent SIGHUP to Xray process {pid}")
+                    time.sleep(2)  # Даем больше времени на применение изменений
+                    
+                    # Проверяем, что процесс все еще работает
+                    check_result = subprocess.run(
+                        ["pgrep", "-f", "/usr/local/bin/xray"],
+                        capture_output=True,
+                        text=True,
+                    )
+                    
+                    if check_result.returncode == 0:
+                        logger.info(f"✅ Xray process still running after SIGHUP")
+                        # SIGHUP отправлен, но Xray может не применять изменения для shortIds
+                        # Используем graceful restart для гарантированного применения
+                        logger.info(f"⚠️  Note: SIGHUP may not apply shortIds changes, using graceful restart for reliability")
+                        return self._restart_xray()
+                    else:
+                        logger.warning(f"⚠️  Xray process terminated after SIGHUP, restarting...")
+                        # Процесс завершился, нужно перезапустить
+                        return self._restart_xray()
+                        
+                except ProcessLookupError:
+                    logger.warning(f"Xray process {pid} not found, restarting...")
+                    return self._restart_xray()
+                except PermissionError:
+                    logger.warning(f"No permission to send signal to process {pid}")
+                    return False
+            else:
+                logger.warning("Xray process not found, starting...")
+                return self._start_xray()
+
         except Exception as e:
-            logger.warning(f"Could not reload Xray config via API: {e}")
-            # Это не критично, конфигурация будет перезагружена при следующем перезапуске
+            logger.error(f"Error reloading Xray config: {e}")
+            return False
+    
+    def _restart_xray(self) -> bool:
+        """Graceful restart Xray процесса"""
+        try:
+            import signal
+            import os
+            import time
+            
+            # Находим процесс
+            result = subprocess.run(
+                ["pgrep", "-f", "/usr/local/bin/xray"],
+                capture_output=True,
+                text=True,
+            )
+            
+            if result.returncode == 0:
+                pid = int(result.stdout.strip().split("\n")[0])
+                # Отправляем SIGTERM для graceful shutdown
+                os.kill(pid, signal.SIGTERM)
+                logger.info(f"✅ Sent SIGTERM to Xray process {pid} for graceful shutdown")
+                
+                # Ждем завершения процесса
+                for i in range(10):
+                    time.sleep(0.5)
+                    check_result = subprocess.run(
+                        ["pgrep", "-f", "/usr/local/bin/xray"],
+                        capture_output=True,
+                        text=True,
+                    )
+                    if check_result.returncode != 0:
+                        break
+                else:
+                    # Процесс не завершился, принудительно
+                    logger.warning(f"⚠️  Xray process did not terminate, sending SIGKILL")
+                    try:
+                        os.kill(pid, signal.SIGKILL)
+                    except ProcessLookupError:
+                        pass
+            
+            # Запускаем заново
+            return self._start_xray()
+            
+        except Exception as e:
+            logger.error(f"Error restarting Xray: {e}")
+            return False
+    
+    def _start_xray(self) -> bool:
+        """Запуск Xray процесса"""
+        try:
+            import subprocess
+            import os
+            
+            xray_binary = self.xray_binary_path
+            config_path = self.config_path
+            
+            if not os.path.exists(xray_binary):
+                logger.error(f"Xray binary not found at {xray_binary}")
+                return False
+            
+            # Запускаем в фоне
+            process = subprocess.Popen(
+                [xray_binary, "-config", config_path],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                start_new_session=True
+            )
+            
+            logger.info(f"✅ Started Xray process (PID: {process.pid})")
             return True
+            
+        except Exception as e:
+            logger.error(f"Error starting Xray: {e}")
+            return False

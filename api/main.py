@@ -37,7 +37,7 @@ logger = logging.getLogger(__name__)
 app = FastAPI(
     title="Veil Xray API",
     description="API для управления VLESS+Reality VPN сервером",
-    version="1.0.0",
+    version="1.3.1",
 )
 
 
@@ -128,6 +128,9 @@ async def sync_users_with_xray():
         skipped_count = 0
         error_count = 0
 
+        # Используем общий short_id для всех пользователей
+        common_short_id = settings.reality_common_short_id
+        
         for key in keys:
             try:
                 email = f"user_{key.id}_{key.uuid[:8]}"
@@ -138,7 +141,7 @@ async def sync_users_with_xray():
                 # Это гарантирует, что пользователь будет в конфиге даже если API недоступен
                 try:
                     config_success = xray_config_manager.add_user_to_config(
-                        uuid=key.uuid, short_id=key.short_id, email=email
+                        uuid=key.uuid, short_id=common_short_id, email=email
                     )
                     if config_success:
                         config_updated = True
@@ -271,6 +274,11 @@ async def startup_event():
     await config_task_queue.start()
     logger.info("✅ Config task queue started")
 
+    # Убеждаемся, что общий short_id присутствует в конфигурации Xray
+    common_short_id = settings.reality_common_short_id
+    xray_config_manager.ensure_common_short_id(common_short_id)
+    logger.info(f"✅ Common short_id '{common_short_id}' ensured in Xray config")
+
     # Синхронизация пользователей с Xray API
     await sync_users_with_xray()
 
@@ -315,22 +323,14 @@ async def create_key(
     try:
         # Генерация уникальных параметров
         uuid_value = generate_uuid()
-        short_id = generate_short_id(8)
-
-        # Проверка уникальности (на всякий случай)
-        # Используем try-except для обработки случая, когда таблица еще не создана
-        try:
-            while db.query(Key).filter(Key.short_id == short_id).first():
-                short_id = generate_short_id(8)
-        except Exception:
-            # Если таблица не существует, просто продолжаем (она будет создана)
-            pass
+        # Используем общий short_id для всех пользователей
+        common_short_id = settings.reality_common_short_id
 
         # Создание записи в базе данных
         timestamp = int(time.time())
         new_key = Key(
             uuid=uuid_value,
-            short_id=short_id,
+            short_id=common_short_id,  # Используем общий short_id
             name=key_data.name,
             created_at=timestamp,
             is_active=1,
@@ -346,42 +346,90 @@ async def create_key(
         # Пытаемся добавить через Xray API (может не работать, если Xray не запущен)
         api_success = await xray_client.add_user(uuid_value, email)
 
-        # Добавляем задачу в очередь для последовательной обработки конфигурации
-        # Это гарантирует отсутствие race conditions при параллельных запросах
-        config_task_added = False
+        # Добавляем пользователя в конфигурационный файл и ждем выполнения
+        # Это гарантирует, что пользователь будет добавлен в конфигурацию перед финальным коммитом
+        config_success = False
         try:
-            await config_task_queue.add_task(
+            # Используем execute_task_and_wait для гарантированного выполнения
+            config_success = await config_task_queue.execute_task_and_wait(
                 task_type=TaskType.ADD_USER,
                 uuid=uuid_value,
-                short_id=short_id,
+                short_id=common_short_id,  # Используем общий short_id
                 email=email,
+                timeout=30.0,  # Таймаут 30 секунд
             )
-            config_task_added = True
-            logger.debug(
-                f"📥 Added ADD_USER task to queue for key {new_key.id} "
-                f"(UUID: {uuid_value[:8]}...)"
-            )
-        except Exception as e:
-            logger.error(f"Failed to add task to queue: {e}")
-            # Если очередь недоступна, используем прямой вызов как fallback
-            config_success = xray_config_manager.add_user_to_config(
-                uuid=uuid_value, short_id=short_id, email=email
-            )
-            if not config_success:
-                logger.error(f"Failed to add user to Xray config file: {new_key.id}")
+            if config_success:
+                logger.info(
+                    f"✅ User {new_key.id} (UUID: {uuid_value[:8]}...) added to Xray config file"
+                )
+            else:
+                logger.error(
+                    f"❌ Failed to add user {new_key.id} (UUID: {uuid_value[:8]}...) "
+                    f"to Xray config file"
+                )
+                # Откатываем транзакцию, если не удалось добавить в конфигурацию
                 db.rollback()
                 raise HTTPException(
                     status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                     detail="Failed to update Xray configuration",
                 )
+        except asyncio.TimeoutError:
+            logger.error(
+                f"❌ Timeout waiting for config update for key {new_key.id} (UUID: {uuid_value[:8]}...). "
+                f"Trying direct fallback..."
+            )
+            # Fallback: прямой вызов если очередь не отвечает
+            try:
+                config_success = xray_config_manager.add_user_to_config(
+                    uuid=uuid_value, short_id=common_short_id, email=email
+                )
+                if not config_success:
+                    db.rollback()
+                    raise HTTPException(
+                        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                        detail="Failed to update Xray configuration (timeout and fallback failed)",
+                    )
+            except Exception as e:
+                logger.error(f"❌ Fallback config addition also failed: {e}")
+                db.rollback()
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail=f"Failed to update Xray configuration: {str(e)}",
+                )
+        except HTTPException:
+            raise
+        except Exception as e:
+            logger.error(
+                f"❌ Error adding user {new_key.id} to config: {e}. Trying direct fallback..."
+            )
+            # Fallback: прямой вызов при ошибке
+            try:
+                config_success = xray_config_manager.add_user_to_config(
+                    uuid=uuid_value, short_id=common_short_id, email=email
+                )
+                if not config_success:
+                    db.rollback()
+                    raise HTTPException(
+                        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                        detail="Failed to update Xray configuration (fallback failed)",
+                    )
+            except HTTPException:
+                raise
+            except Exception as fallback_error:
+                logger.error(f"❌ Fallback config addition also failed: {fallback_error}")
+                db.rollback()
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail=f"Failed to update Xray configuration: {str(fallback_error)}",
+                )
 
         if not api_success:
             logger.warning(
                 f"⚠️  Failed to add user {new_key.id} (UUID: {uuid_value[:8]}...) "
-                f"to Xray via API, but config task added to queue. "
+                f"to Xray via API, but added to config file. "
                 f"User will be available after Xray restart or will be synced automatically."
             )
-            # Это не критично, задача добавлена в очередь
+            # Это не критично, пользователь добавлен в конфигурацию
 
         # Инициализация статистики трафика
         traffic_stat = TrafficStats(
@@ -397,7 +445,7 @@ async def create_key(
         return KeyResponse(
             key_id=new_key.id,  # type: ignore
             uuid=new_key.uuid,  # type: ignore
-            short_id=new_key.short_id,  # type: ignore
+            short_id=common_short_id,  # Возвращаем общий short_id
             name=new_key.name,  # type: ignore
             created_at=new_key.created_at,  # type: ignore
             is_active=bool(new_key.is_active),  # type: ignore
@@ -437,33 +485,68 @@ async def delete_key(
         # Пытаемся удалить через Xray API
         await xray_client.remove_user(email)
 
-        # Добавляем задачу в очередь для последовательной обработки конфигурации
-        # Это гарантирует отсутствие race conditions при параллельных запросах
+        # Удаляем пользователя из конфигурационного файла и ждем выполнения
+        # Это гарантирует, что пользователь будет удален из конфигурации перед удалением из БД
+        config_success = False
         try:
-            await config_task_queue.add_task(
+            # Используем общий short_id для всех пользователей
+            common_short_id = settings.reality_common_short_id
+            
+            # Используем execute_task_and_wait для гарантированного выполнения
+            config_success = await config_task_queue.execute_task_and_wait(
                 task_type=TaskType.REMOVE_USER,
                 uuid=key.uuid,  # type: ignore
-                short_id=key.short_id,  # type: ignore
+                short_id=common_short_id,  # Используем общий short_id
                 email=email,
+                timeout=30.0,  # Таймаут 30 секунд
             )
-            logger.debug(
-                f"📥 Added REMOVE_USER task to queue for key {key_id} "
-                f"(UUID: {key.uuid[:8]}...)"
-            )
-        except Exception as e:
-            logger.error(f"Failed to add task to queue: {e}")
-            # Если очередь недоступна, используем прямой вызов как fallback
-            config_success = xray_config_manager.remove_user_from_config(
-                uuid=key.uuid, short_id=key.short_id  # type: ignore
-            )
-            if not config_success:
+            if config_success:
+                logger.info(
+                    f"✅ User {key_id} (UUID: {key.uuid[:8]}...) removed from Xray config file"
+                )
+            else:
                 logger.warning(
                     f"⚠️  Failed to remove user {key_id} (UUID: {key.uuid[:8]}...) "
-                    f"from Xray config file. User removed from database but may still exist in config."
+                    f"from Xray config file"
                 )
-            # Продолжаем удаление из БД, даже если конфигурация не обновлена
+        except asyncio.TimeoutError:
+            logger.error(
+                f"❌ Timeout waiting for config update for key {key_id} (UUID: {key.uuid[:8]}...). "
+                f"Trying direct fallback..."
+            )
+            # Fallback: прямой вызов если очередь не отвечает
+            try:
+                common_short_id = settings.reality_common_short_id
+                config_success = xray_config_manager.remove_user_from_config(
+                    uuid=key.uuid, short_id=common_short_id  # type: ignore
+                )
+            except Exception as e:
+                logger.error(f"❌ Fallback config removal also failed: {e}")
+                config_success = False
+        except Exception as e:
+            logger.error(
+                f"❌ Error removing user {key_id} from config: {e}. Trying direct fallback..."
+            )
+            # Fallback: прямой вызов при ошибке
+            try:
+                common_short_id = settings.reality_common_short_id
+                config_success = xray_config_manager.remove_user_from_config(
+                    uuid=key.uuid, short_id=common_short_id  # type: ignore
+                )
+            except Exception as fallback_error:
+                logger.error(f"❌ Fallback config removal also failed: {fallback_error}")
+                config_success = False
+
+        # Если удаление из конфигурации не удалось, логируем предупреждение
+        # но продолжаем удаление из БД (чтобы не блокировать операцию)
+        if not config_success:
+            logger.warning(
+                f"⚠️  Key {key_id} will be removed from database, but user may still exist in Xray config file. "
+                f"Manual cleanup may be required."
+            )
 
         # Удаление из базы данных (каскадное удаление статистики)
+        # Теперь это происходит ПОСЛЕ попытки удаления из конфигурации
         db.delete(key)
         db.commit()
 
@@ -574,15 +657,33 @@ async def get_vless_link(
                 detail="Reality public key not configured",
             )
 
+        # Конвертируем публичный ключ в URL-safe формат для использования в ссылке
+        # Если ключ в стандартном base64 формате, конвертируем в URL-safe
+        public_key = settings.reality_public_key
+        try:
+            import base64
+            # Пробуем декодировать и перекодировать в URL-safe формат
+            # Это нужно, если ключ хранится в стандартном base64 формате
+            if '/' in public_key or '+' in public_key or public_key.endswith('='):
+                # Стандартный base64, конвертируем в URL-safe
+                decoded = base64.b64decode(public_key + '==' if not public_key.endswith('=') else public_key)
+                public_key = base64.urlsafe_b64encode(decoded).decode('utf-8').rstrip('=')
+        except Exception:
+            # Если не удалось конвертировать, используем как есть
+            pass
+
         # Построение VLESS ссылки
+        # Используем общий short_id для всех пользователей (из настроек)
+        # Это позволяет избежать перезагрузки Xray при создании/удалении ключей
+        common_short_id = settings.reality_common_short_id
         vless_link = build_vless_link(
             uuid=key.uuid,  # type: ignore
-            short_id=key.short_id,  # type: ignore
+            short_id=common_short_id,  # Используем общий short_id из настроек
             server_address=settings.reality_server_name,
             port=settings.reality_port,
             sni=settings.reality_sni,
             fingerprint=settings.reality_fingerprint,
-            public_key=settings.reality_public_key,
+            public_key=public_key,  # Используем URL-safe формат
             dest=settings.reality_dest,
             flow="none",
         )
@@ -607,11 +708,14 @@ async def list_keys(token: str = Depends(verify_token), db: Session = Depends(ge
     try:
         keys = db.query(Key).all()
 
+        # Используем общий short_id для всех пользователей
+        common_short_id = settings.reality_common_short_id
+        
         key_responses = [
             KeyResponse(
                 key_id=key.id,  # type: ignore
                 uuid=key.uuid,  # type: ignore
-                short_id=key.short_id,  # type: ignore
+                short_id=common_short_id,  # Возвращаем общий short_id
                 name=key.name,  # type: ignore
                 created_at=key.created_at,  # type: ignore
                 is_active=bool(key.is_active),  # type: ignore
@@ -645,10 +749,13 @@ async def get_key(
                 detail=f"Key with id {key_id} not found",
             )
 
+        # Используем общий short_id для всех пользователей
+        common_short_id = settings.reality_common_short_id
+        
         return KeyResponse(
             key_id=key.id,  # type: ignore
             uuid=key.uuid,  # type: ignore
-            short_id=key.short_id,  # type: ignore
+            short_id=common_short_id,  # Возвращаем общий short_id
             name=key.name,  # type: ignore
             created_at=key.created_at,  # type: ignore
             is_active=bool(key.is_active),  # type: ignore

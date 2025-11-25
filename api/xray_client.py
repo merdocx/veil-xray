@@ -88,40 +88,99 @@ class XrayClient:
     ) -> bool:
         """
         Внутренний метод добавления пользователя в Xray через API (без retry)
+        Использует CLI команду xray api adu
 
         Args:
             uuid: UUID пользователя
-            email: Email/идентификатор пользователя (используем UUID)
+            email: Email/идентификатор пользователя
             flow: Flow для VLESS (none или xtls-rprx-vision)
 
         Returns:
             True если успешно, False в противном случае
         """
-        async with httpx.AsyncClient(timeout=self.timeout) as client:
-            payload = {"email": email, "uuid": uuid, "flow": flow}
+        import tempfile
+        import os
 
-            response = await client.post(
-                f"{self.base_url}/api/v1/users/add", json=payload
+        # Создаем временный JSON файл с конфигурацией пользователя
+        # Формат должен соответствовать структуре inbound из Xray
+        user_config = {
+            "inbounds": [
+                {
+                    "tag": "vless-reality",
+                    "protocol": "vless",
+                    "port": 443,
+                    "settings": {
+                        "clients": [
+                            {
+                                "id": uuid,
+                                "flow": flow,
+                                "email": email
+                            }
+                        ],
+                        "decryption": "none"
+                    }
+                }
+            ]
+        }
+
+        try:
+            # Создаем временный файл
+            with tempfile.NamedTemporaryFile(
+                mode="w", suffix=".json", delete=False
+            ) as tmp_file:
+                json.dump(user_config, tmp_file, indent=2)
+                tmp_config_path = tmp_file.name
+
+            try:
+                # Выполняем CLI команду для добавления пользователя
+                server = f"{settings.xray_api_host}:{settings.xray_api_port}"
+                cmd = [
+                    "/usr/local/bin/xray",
+                    "api",
+                    "adu",
+                    f"--server={server}",
+                    f"--timeout={int(self.timeout)}",
+                    tmp_config_path
+                ]
+
+                result = subprocess.run(
+                    cmd,
+                    capture_output=True,
+                    text=True,
+                    timeout=self.timeout
+                )
+
+                if result.returncode == 0:
+                    logger.info(
+                        f"✅ User {uuid[:8]}... (email: {email}) added successfully to Xray via API"
+                    )
+                    return True
+                else:
+                    error_msg = result.stderr or result.stdout or "Unknown error"
+                    logger.error(
+                        f"❌ Failed to add user {uuid[:8]}... via Xray API: {error_msg}"
+                    )
+                    raise Exception(f"Xray API error: {error_msg}")
+
+            finally:
+                # Удаляем временный файл
+                if os.path.exists(tmp_config_path):
+                    os.unlink(tmp_config_path)
+
+        except subprocess.TimeoutExpired:
+            logger.error(
+                f"❌ Timeout adding user {uuid[:8]}... via Xray API (timeout: {self.timeout}s)"
             )
-
-            if response.status_code == 200:
-                logger.info(
-                    f"✅ User {uuid[:8]}... (email: {email}) added successfully to Xray via API"
-                )
-                return True
-            else:
-                # Вызываем исключение для retry механизма
-                raise httpx.HTTPStatusError(
-                    f"HTTP {response.status_code}: {response.text}",
-                    request=response.request,
-                    response=response,
-                )
+            raise
+        except Exception as e:
+            logger.error(f"❌ Error adding user {uuid[:8]}... via Xray API: {e}")
+            raise
 
     @retry(
         stop=stop_after_attempt(3),
         wait=wait_exponential(multiplier=1, min=2, max=10),
         retry=retry_if_exception_type(
-            (httpx.ConnectError, httpx.TimeoutException, httpx.HTTPStatusError)
+            (subprocess.TimeoutExpired, FileNotFoundError)
         ),
         reraise=True,
         before_sleep=lambda retry_state: logger.warning(
@@ -154,34 +213,28 @@ class XrayClient:
 
         try:
             return await self._add_user_internal(uuid, email, flow)
-        except httpx.ConnectError as e:
-            logger.error(
-                f"❌ Connection error adding user {uuid[:8]}... to Xray API after retries: {e}. "
-                f"Xray API is not accessible at {self.base_url}"
-            )
-            self._is_available = False
-            return False
-        except httpx.TimeoutException:
+        except subprocess.TimeoutExpired:
             logger.error(
                 f"❌ Timeout adding user {uuid[:8]}... to Xray API after retries. "
                 f"Xray API did not respond within {self.timeout}s"
             )
             return False
-        except httpx.HTTPStatusError as e:
+        except FileNotFoundError:
             logger.error(
-                f"❌ Failed to add user {uuid[:8]}... to Xray API after retries: "
-                f"HTTP {e.response.status_code if e.response else 'unknown'} - {e}"
+                f"❌ Xray binary not found at /usr/local/bin/xray. "
+                f"Cannot add user {uuid[:8]}... via API"
             )
             return False
         except Exception as e:
             logger.error(
-                f"❌ Unexpected error adding user {uuid[:8]}... to Xray API: {type(e).__name__}: {e}"
+                f"❌ Error adding user {uuid[:8]}... to Xray API: {type(e).__name__}: {e}"
             )
             return False
 
     async def _remove_user_internal(self, email: str) -> bool:
         """
         Внутренний метод удаления пользователя из Xray через API (без retry)
+        Использует CLI команду xray api rmu
 
         Args:
             email: Email/идентификатор пользователя
@@ -189,27 +242,56 @@ class XrayClient:
         Returns:
             True если успешно, False в противном случае
         """
-        async with httpx.AsyncClient(timeout=self.timeout) as client:
-            response = await client.post(
-                f"{self.base_url}/api/v1/users/remove", json={"email": email}
+        try:
+            # Выполняем CLI команду для удаления пользователя
+            server = f"{settings.xray_api_host}:{settings.xray_api_port}"
+            cmd = [
+                "/usr/local/bin/xray",
+                "api",
+                "rmu",
+                f"--server={server}",
+                f"--timeout={int(self.timeout)}",
+                "--tag=vless-reality",
+                email
+            ]
+
+            result = subprocess.run(
+                cmd,
+                capture_output=True,
+                text=True,
+                timeout=self.timeout
             )
 
-            if response.status_code == 200:
+            if result.returncode == 0:
                 logger.info(f"✅ User {email} removed successfully from Xray via API")
                 return True
             else:
-                # Вызываем исключение для retry механизма
-                raise httpx.HTTPStatusError(
-                    f"HTTP {response.status_code}: {response.text}",
-                    request=response.request,
-                    response=response,
+                error_msg = result.stderr or result.stdout or "Unknown error"
+                # Если пользователь не найден, это не критичная ошибка
+                if "not found" in error_msg.lower() or "no such" in error_msg.lower():
+                    logger.warning(
+                        f"⚠️  User {email} not found in Xray (may have been already removed)"
+                    )
+                    return True  # Возвращаем True, так как цель достигнута
+                logger.error(
+                    f"❌ Failed to remove user {email} via Xray API: {error_msg}"
                 )
+                raise Exception(f"Xray API error: {error_msg}")
+
+        except subprocess.TimeoutExpired:
+            logger.error(
+                f"❌ Timeout removing user {email} via Xray API (timeout: {self.timeout}s)"
+            )
+            raise
+        except Exception as e:
+            logger.error(f"❌ Error removing user {email} via Xray API: {e}")
+            raise
 
     @retry(
         stop=stop_after_attempt(3),
         wait=wait_exponential(multiplier=1, min=2, max=10),
         retry=retry_if_exception_type(
-            (httpx.ConnectError, httpx.TimeoutException, httpx.HTTPStatusError)
+            (subprocess.TimeoutExpired, FileNotFoundError)
         ),
         reraise=True,
         before_sleep=lambda retry_state: logger.warning(
@@ -240,28 +322,21 @@ class XrayClient:
 
         try:
             return await self._remove_user_internal(email)
-        except httpx.ConnectError as e:
-            logger.error(
-                f"❌ Connection error removing user {email} from Xray API after retries: {e}. "
-                f"Xray API is not accessible at {self.base_url}"
-            )
-            self._is_available = False
-            return False
-        except httpx.TimeoutException:
+        except subprocess.TimeoutExpired:
             logger.error(
                 f"❌ Timeout removing user {email} from Xray API after retries. "
                 f"Xray API did not respond within {self.timeout}s"
             )
             return False
-        except httpx.HTTPStatusError as e:
+        except FileNotFoundError:
             logger.error(
-                f"❌ Failed to remove user {email} from Xray API after retries: "
-                f"HTTP {e.response.status_code if e.response else 'unknown'} - {e}"
+                f"❌ Xray binary not found at /usr/local/bin/xray. "
+                f"Cannot remove user {email} via API"
             )
             return False
         except Exception as e:
             logger.error(
-                f"❌ Unexpected error removing user {email} from Xray API: {type(e).__name__}: {e}"
+                f"❌ Error removing user {email} from Xray API: {type(e).__name__}: {e}"
             )
             return False
 

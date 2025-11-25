@@ -22,7 +22,7 @@ class Key(Base):  # type: ignore
 
     id = Column(Integer, primary_key=True, index=True)
     uuid = Column(String, unique=True, index=True, nullable=False)
-    short_id = Column(String(8), unique=True, index=True, nullable=False)
+    short_id = Column(String(8), index=True, nullable=False)  # Убрано unique, так как используется общий short_id
     name = Column(String, nullable=True)
     created_at = Column(BigInteger, nullable=False)
     is_active = Column(Integer, default=1)
