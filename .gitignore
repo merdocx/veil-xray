@@ -51,6 +51,7 @@ Thumbs.db
 # Xray
 xray/config.json
 xray/*.log
+# Note: xray/config.example.json is tracked, but config.json with real keys is ignored
 
 # Secrets
 *.key
