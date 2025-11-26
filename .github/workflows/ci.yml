@@ -43,6 +43,17 @@ jobs:
         pip install -r requirements.txt
         pip install -r requirements-dev.txt
     
+    - name: Set up test environment
+      run: |
+        # Устанавливаем минимальные переменные окружения для тестов
+        echo "API_SECRET_KEY=test-secret-key-for-ci-12345678901234567890" >> $GITHUB_ENV
+        echo "REALITY_PUBLIC_KEY=test-public-key" >> $GITHUB_ENV
+        echo "REALITY_PRIVATE_KEY=test-private-key" >> $GITHUB_ENV
+        echo "REALITY_COMMON_SHORT_ID=7bb45050" >> $GITHUB_ENV
+        echo "DATABASE_URL=sqlite:///./test.db" >> $GITHUB_ENV
+        echo "XRAY_API_HOST=127.0.0.1" >> $GITHUB_ENV
+        echo "XRAY_API_PORT=10085" >> $GITHUB_ENV
+    
     - name: Lint with flake8
       run: |
         flake8 api config tests --count --select=E9,F63,F7,F82 --show-source --statistics
