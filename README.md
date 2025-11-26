@@ -279,8 +279,12 @@ Content-Type: application/json
 #### Получение информации о ключе
 ```bash
 GET /api/keys/{key_id}
+# или
+GET /api/keys/{uuid}
 Authorization: Bearer YOUR_SECRET_KEY
 ```
+
+**Примечание:** Endpoint поддерживает как `key_id`, так и `uuid` в качестве идентификатора.
 
 Ответ:
 ```json
@@ -320,8 +324,12 @@ Authorization: Bearer YOUR_SECRET_KEY
 #### Удаление ключа
 ```bash
 DELETE /api/keys/{key_id}
+# или
+DELETE /api/keys/{uuid}
 Authorization: Bearer YOUR_SECRET_KEY
 ```
+
+**Примечание:** Endpoint поддерживает как `key_id`, так и `uuid` в качестве идентификатора.
 
 Ответ:
 ```json
@@ -348,11 +356,35 @@ Authorization: Bearer YOUR_SECRET_KEY
 }
 ```
 
+#### Обнуление статистики трафика
+```bash
+POST /api/keys/{key_id}/traffic/reset
+Authorization: Bearer YOUR_SECRET_KEY
+```
+
+Обнуление статистики трафика по конкретному ключу.
+
+Ответ:
+```json
+{
+  "success": true,
+  "message": "Traffic reset successfully for key 1",
+  "key_id": 1,
+  "previous_upload": 1024000,
+  "previous_download": 2048000,
+  "previous_total": 3072000
+}
+```
+
 #### Получение VLESS ссылки
 ```bash
 GET /api/keys/{key_id}/link
+# или
+GET /api/keys/{uuid}/link
 Authorization: Bearer YOUR_SECRET_KEY
 ```
+
+**Примечание:** Endpoint поддерживает как `key_id`, так и `uuid` в качестве идентификатора.
 
 Ответ:
 ```json
