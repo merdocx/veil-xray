@@ -10,6 +10,10 @@ Environment="PATH=/root/venv/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/b
 ExecStart=/root/venv/bin/python3 -m uvicorn api.main:app --host 0.0.0.0 --port 8000
 Restart=always
 RestartSec=10
+# Логирование
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=veil-xray-api
 
 [Install]
 WantedBy=multi-user.target

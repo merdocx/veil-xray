@@ -1,0 +1,16 @@
+# Конфигурация ротации логов для Veil Xray API
+/root/logs/veil_xray_api.log {
+    daily
+    missingok
+    rotate 30
+    compress
+    delaycompress
+    notifempty
+    create 0644 root root
+    sharedscripts
+    postrotate
+        # Перезагружаем systemd unit для применения изменений
+        systemctl reload veil-xray-api > /dev/null 2>&1 || true
+    endscript
+}
+

@@ -28,6 +28,7 @@ ENV/
 *.sqlite
 *.sqlite3
 database/*.db
+backups/
 
 # IDE
 .vscode/

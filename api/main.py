@@ -8,8 +8,10 @@ from sqlalchemy.orm import Session
 from typing import List
 import time
 import logging
+import logging.handlers
 import asyncio
 from datetime import datetime
+from pathlib import Path
 
 from api.database import get_db, Key, TrafficStats, init_db
 from api.models import (
@@ -28,16 +30,58 @@ from api.utils import generate_uuid, generate_short_id, build_vless_link
 from config.settings import settings
 
 # Настройка логирования
-logging.basicConfig(
-    level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-)
+def setup_logging():
+    """Настройка логирования с файловым выводом и ротацией"""
+    log_level = getattr(settings, "log_level", "INFO")
+    log_file = getattr(settings, "log_file", "./logs/veil_xray_api.log")
+    log_max_bytes = getattr(settings, "log_max_bytes", 10485760)  # 10MB
+    log_backup_count = getattr(settings, "log_backup_count", 5)
+    
+    # Создаем директорию для логов если её нет
+    if log_file:
+        log_path = Path(log_file)
+        log_path.parent.mkdir(parents=True, exist_ok=True)
+    
+    # Формат логов
+    log_format = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+    date_format = "%Y-%m-%d %H:%M:%S"
+    
+    # Настройка root logger
+    root_logger = logging.getLogger()
+    root_logger.setLevel(getattr(logging, log_level.upper(), logging.INFO))
+    
+    # Удаляем существующие handlers
+    root_logger.handlers.clear()
+    
+    # Handler для файла с ротацией
+    if log_file:
+        file_handler = logging.handlers.RotatingFileHandler(
+            log_file,
+            maxBytes=log_max_bytes,
+            backupCount=log_backup_count,
+            encoding="utf-8"
+        )
+        file_handler.setLevel(getattr(logging, log_level.upper(), logging.INFO))
+        file_formatter = logging.Formatter(log_format, date_format)
+        file_handler.setFormatter(file_formatter)
+        root_logger.addHandler(file_handler)
+    
+    # Handler для консоли (stdout)
+    console_handler = logging.StreamHandler()
+    console_handler.setLevel(getattr(logging, log_level.upper(), logging.INFO))
+    console_formatter = logging.Formatter(log_format, date_format)
+    console_handler.setFormatter(console_formatter)
+    root_logger.addHandler(console_handler)
+
+# Инициализация логирования
+setup_logging()
 logger = logging.getLogger(__name__)
 
 # Инициализация FastAPI
 app = FastAPI(
     title="Veil Xray API",
     description="API для управления VLESS+Reality VPN сервером",
-    version="1.3.4",
+    version="1.3.5",
 )
 
 
