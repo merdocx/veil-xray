@@ -51,12 +51,12 @@ class LoggingMiddleware(BaseHTTPMiddleware):
         request_method = request.method
         query_params = str(request.url.query) if request.url.query else ""
         full_path = f"{request_path}?{query_params}" if query_params else request_path
-        
+
         try:
             response = await call_next(request)
             process_time = time.time() - start_time
             status_code = response.status_code
-            
+
             # Логируем ошибки с более подробной информацией
             if status_code >= 400:
                 logger.warning(
@@ -993,9 +993,7 @@ async def get_key_by_uuid(
     except HTTPException:
         raise
     except Exception as e:
-        logger.exception(
-            f"Error getting key by UUID '{uuid}': {type(e).__name__}: {e}"
-        )
+        logger.exception(f"Error getting key by UUID '{uuid}': {type(e).__name__}: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to get key: {str(e)}",
