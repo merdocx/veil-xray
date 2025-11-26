@@ -37,8 +37,57 @@ logger = logging.getLogger(__name__)
 app = FastAPI(
     title="Veil Xray API",
     description="API для управления VLESS+Reality VPN сервером",
-    version="1.3.2",
+    version="1.3.3",
 )
+
+
+# Middleware для логирования запросов и ошибок
+class LoggingMiddleware(BaseHTTPMiddleware):
+    """Middleware для логирования всех запросов и ошибок с полными деталями"""
+
+    async def dispatch(self, request: Request, call_next):
+        start_time = time.time()
+        request_path = str(request.url.path)
+        request_method = request.method
+        query_params = str(request.url.query) if request.url.query else ""
+        full_path = f"{request_path}?{query_params}" if query_params else request_path
+        
+        try:
+            response = await call_next(request)
+            process_time = time.time() - start_time
+            status_code = response.status_code
+            
+            # Логируем ошибки с более подробной информацией
+            if status_code >= 400:
+                logger.warning(
+                    f"⚠️  {request_method} {full_path} - "
+                    f"Status: {status_code} - "
+                    f"Time: {process_time:.3f}s"
+                )
+            else:
+                logger.info(
+                    f"{request_method} {full_path} - "
+                    f"Status: {status_code} - "
+                    f"Time: {process_time:.3f}s"
+                )
+            return response
+        except HTTPException as e:
+            process_time = time.time() - start_time
+            logger.error(
+                f"❌ HTTPException in {request_method} {full_path} - "
+                f"Status: {e.status_code} - "
+                f"Detail: {e.detail} - "
+                f"Time: {process_time:.3f}s"
+            )
+            raise
+        except Exception as e:
+            process_time = time.time() - start_time
+            logger.exception(
+                f"❌ Error processing {request_method} {full_path} - "
+                f"Time: {process_time:.3f}s - "
+                f"Error: {type(e).__name__}: {e}"
+            )
+            raise
 
 
 # Middleware для принудительного HTTPS (если используется reverse proxy)
@@ -59,6 +108,9 @@ class ForceHTTPSMiddleware(BaseHTTPMiddleware):
         response = await call_next(request)
         return response
 
+
+# Добавляем middleware для логирования запросов и ошибок
+app.add_middleware(LoggingMiddleware)
 
 # Добавляем middleware для принудительного HTTPS (только если используется reverse proxy)
 # Раскомментируйте следующую строку, если хотите включить принудительное перенаправление на уровне приложения
@@ -130,7 +182,7 @@ async def sync_users_with_xray():
 
         # Используем общий short_id для всех пользователей
         common_short_id = settings.reality_common_short_id
-        
+
         for key in keys:
             try:
                 email = f"user_{key.id}_{key.uuid[:8]}"
@@ -416,7 +468,9 @@ async def create_key(
             except HTTPException:
                 raise
             except Exception as fallback_error:
-                logger.error(f"❌ Fallback config addition also failed: {fallback_error}")
+                logger.error(
+                    f"❌ Fallback config addition also failed: {fallback_error}"
+                )
                 db.rollback()
                 raise HTTPException(
                     status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -473,7 +527,7 @@ async def delete_key(
     """
     try:
         # Пытаемся определить, это UUID или key_id
-        if '-' in identifier:
+        if "-" in identifier:
             # Это UUID
             key = db.query(Key).filter(Key.uuid == identifier).first()
         else:
@@ -507,7 +561,7 @@ async def delete_key(
         try:
             # Используем общий short_id для всех пользователей
             common_short_id = settings.reality_common_short_id
-            
+
             # Используем execute_task_and_wait для гарантированного выполнения
             config_success = await config_task_queue.execute_task_and_wait(
                 task_type=TaskType.REMOVE_USER,
@@ -660,7 +714,7 @@ async def get_vless_link(
     """
     try:
         # Пытаемся определить, это UUID или key_id
-        if '-' in identifier:
+        if "-" in identifier:
             # Это UUID
             key = db.query(Key).filter(Key.uuid == identifier).first()
         else:
@@ -692,12 +746,17 @@ async def get_vless_link(
         public_key = settings.reality_public_key
         try:
             import base64
+
             # Пробуем декодировать и перекодировать в URL-safe формат
             # Это нужно, если ключ хранится в стандартном base64 формате
-            if '/' in public_key or '+' in public_key or public_key.endswith('='):
+            if "/" in public_key or "+" in public_key or public_key.endswith("="):
                 # Стандартный base64, конвертируем в URL-safe
-                decoded = base64.b64decode(public_key + '==' if not public_key.endswith('=') else public_key)
-                public_key = base64.urlsafe_b64encode(decoded).decode('utf-8').rstrip('=')
+                decoded = base64.b64decode(
+                    public_key + "==" if not public_key.endswith("=") else public_key
+                )
+                public_key = (
+                    base64.urlsafe_b64encode(decoded).decode("utf-8").rstrip("=")
+                )
         except Exception:
             # Если не удалось конвертировать, используем как есть
             pass
@@ -718,15 +777,14 @@ async def get_vless_link(
             flow="none",
         )
 
-        return VlessLinkResponse(
-            key_id=key.id,  # type: ignore
-            vless_link=vless_link
-        )
+        return VlessLinkResponse(key_id=key.id, vless_link=vless_link)  # type: ignore
 
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Error generating VLESS link: {e}")
+        logger.exception(
+            f"Error generating VLESS link for identifier '{identifier}': {type(e).__name__}: {e}"
+        )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to generate VLESS link: {str(e)}",
@@ -743,7 +801,7 @@ async def list_keys(token: str = Depends(verify_token), db: Session = Depends(ge
 
         # Используем общий short_id для всех пользователей
         common_short_id = settings.reality_common_short_id
-        
+
         key_responses = [
             KeyResponse(
                 key_id=key.id,  # type: ignore
@@ -766,7 +824,9 @@ async def list_keys(token: str = Depends(verify_token), db: Session = Depends(ge
         )
 
 
-@app.get("/api/keys/{identifier}/config", response_model=VlessLinkResponse, tags=["Keys"])
+@app.get(
+    "/api/keys/{identifier}/config", response_model=VlessLinkResponse, tags=["Keys"]
+)
 async def get_key_config(
     identifier: str, token: str = Depends(verify_token), db: Session = Depends(get_db)
 ):
@@ -777,7 +837,7 @@ async def get_key_config(
     try:
         # Пытаемся определить, это UUID или key_id
         # UUID содержит дефисы, key_id - число
-        if '-' in identifier:
+        if "-" in identifier:
             # Это UUID
             key = db.query(Key).filter(Key.uuid == identifier).first()
         else:
@@ -808,9 +868,14 @@ async def get_key_config(
         public_key = settings.reality_public_key
         try:
             import base64
-            if '/' in public_key or '+' in public_key or public_key.endswith('='):
-                decoded = base64.b64decode(public_key + '==' if not public_key.endswith('=') else public_key)
-                public_key = base64.urlsafe_b64encode(decoded).decode('utf-8').rstrip('=')
+
+            if "/" in public_key or "+" in public_key or public_key.endswith("="):
+                decoded = base64.b64decode(
+                    public_key + "==" if not public_key.endswith("=") else public_key
+                )
+                public_key = (
+                    base64.urlsafe_b64encode(decoded).decode("utf-8").rstrip("=")
+                )
         except Exception:
             pass
 
@@ -836,7 +901,9 @@ async def get_key_config(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Error getting key config: {e}")
+        logger.exception(
+            f"Error getting key config for identifier '{identifier}': {type(e).__name__}: {e}"
+        )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to get key config: {str(e)}",
@@ -853,7 +920,7 @@ async def get_key(
     """
     try:
         # Пытаемся определить, это UUID или key_id
-        if '-' in identifier:
+        if "-" in identifier:
             # Это UUID
             key = db.query(Key).filter(Key.uuid == identifier).first()
         else:
@@ -875,7 +942,7 @@ async def get_key(
 
         # Используем общий short_id для всех пользователей
         common_short_id = settings.reality_common_short_id
-        
+
         return KeyResponse(
             key_id=key.id,  # type: ignore
             uuid=key.uuid,  # type: ignore
@@ -913,7 +980,7 @@ async def get_key_by_uuid(
 
         # Используем общий short_id для всех пользователей
         common_short_id = settings.reality_common_short_id
-        
+
         return KeyResponse(
             key_id=key.id,  # type: ignore
             uuid=key.uuid,  # type: ignore
@@ -926,14 +993,18 @@ async def get_key_by_uuid(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Error getting key by UUID: {e}")
+        logger.exception(
+            f"Error getting key by UUID '{uuid}': {type(e).__name__}: {e}"
+        )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to get key: {str(e)}",
         )
 
 
-@app.get("/api/keys/uuid/{uuid}/config", response_model=VlessLinkResponse, tags=["Keys"])
+@app.get(
+    "/api/keys/uuid/{uuid}/config", response_model=VlessLinkResponse, tags=["Keys"]
+)
 async def get_key_config_by_uuid(
     uuid: str, token: str = Depends(verify_token), db: Session = Depends(get_db)
 ):
@@ -961,9 +1032,14 @@ async def get_key_config_by_uuid(
         public_key = settings.reality_public_key
         try:
             import base64
-            if '/' in public_key or '+' in public_key or public_key.endswith('='):
-                decoded = base64.b64decode(public_key + '==' if not public_key.endswith('=') else public_key)
-                public_key = base64.urlsafe_b64encode(decoded).decode('utf-8').rstrip('=')
+
+            if "/" in public_key or "+" in public_key or public_key.endswith("="):
+                decoded = base64.b64decode(
+                    public_key + "==" if not public_key.endswith("=") else public_key
+                )
+                public_key = (
+                    base64.urlsafe_b64encode(decoded).decode("utf-8").rstrip("=")
+                )
         except Exception:
             pass
 
@@ -989,7 +1065,9 @@ async def get_key_config_by_uuid(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Error getting key config by UUID: {e}")
+        logger.exception(
+            f"Error getting key config by UUID '{uuid}': {type(e).__name__}: {e}"
+        )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to get key config: {str(e)}",
@@ -1025,7 +1103,7 @@ async def delete_key_by_uuid(
         config_success = False
         try:
             common_short_id = settings.reality_common_short_id
-            
+
             config_success = await config_task_queue.execute_task_and_wait(
                 task_type=TaskType.REMOVE_USER,
                 uuid=key.uuid,  # type: ignore

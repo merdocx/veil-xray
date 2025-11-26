@@ -40,7 +40,9 @@ class ConfigTaskQueue:
         self._worker_task: Optional[asyncio.Task] = None
         self._lock = asyncio.Lock()
         self._is_running = False
-        self._pending_futures: dict[str, asyncio.Future] = {}  # Словарь для ожидания результатов задач
+        self._pending_futures: dict[
+            str, asyncio.Future
+        ] = {}  # Словарь для ожидания результатов задач
 
     async def start(self):
         """Запуск воркера для обработки задач"""
@@ -148,7 +150,9 @@ class ConfigTaskQueue:
                         future = self._pending_futures.pop(task_id)
                         if not future.done():
                             future.set_result(False)  # Устанавливаем False при ошибке
-                        logger.debug(f"❌ Notified waiting future about error for task {task_id}")
+                        logger.debug(
+                            f"❌ Notified waiting future about error for task {task_id}"
+                        )
                     self._queue.task_done()
 
         logger.info("🔄 Config task queue worker stopped")
@@ -268,14 +272,16 @@ class ConfigTaskQueue:
                 if not short_id:
                     logger.error("Short ID is required for REMOVE_USER task")
                     return False
-                return config_manager.remove_user_from_config(uuid=uuid, short_id=short_id)
+                return config_manager.remove_user_from_config(
+                    uuid=uuid, short_id=short_id
+                )
             else:
                 logger.error(f"Unknown task type: {task_type}")
                 return False
 
         # Создаем Future для ожидания результата
         task_id = f"{task_type.value}_{uuid}"
-        future = asyncio.Future()
+        future: asyncio.Future[bool] = asyncio.Future()
         self._pending_futures[task_id] = future
 
         try:

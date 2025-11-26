@@ -1,9 +1,14 @@
 #!/bin/bash
-# Скрипт для настройки поддомена api.veil-bear.ru для API
+# Скрипт для настройки поддомена для API (например, api.your-domain.com)
+# 
+# ИСПОЛЬЗОВАНИЕ:
+#   1. Отредактируйте переменные SUBDOMAIN и EMAIL ниже
+#   2. Запустите: sudo bash scripts/setup_api_subdomain.sh
 
 set -e
 
-SUBDOMAIN="api.veil-bear.ru"  # Замените на ваш поддомен
+# ⚠️ ВАЖНО: Замените на ваш поддомен и email перед запуском!
+SUBDOMAIN="api.your-domain.com"  # Замените на ваш поддомен (например, api.example.com)
 EMAIL="your-email@example.com"  # Замените на ваш email для Let's Encrypt
 SERVER_IP=$(curl -s ifconfig.me || curl -s icanhazip.com)
 
@@ -38,16 +43,23 @@ else
     echo "✅ DNS запись найдена: $SUBDOMAIN -> $DNS_IP"
 fi
 
+# Определение имени конфигурационного файла из поддомена
+CONFIG_NAME=$(echo $SUBDOMAIN | tr '.' '-')
+CONFIG_FILE="/etc/nginx/sites-available/$CONFIG_NAME"
+
 # Копирование конфигурации
 echo ""
 echo "📝 Копирование конфигурации Nginx..."
-sudo cp /root/scripts/nginx-api-subdomain.conf /etc/nginx/sites-available/api-veil-bear
-sudo ln -sf /etc/nginx/sites-available/api-veil-bear /etc/nginx/sites-enabled/api-veil-bear
+# Создаем временную конфигурацию с заменой домена
+sed "s/api\.veil-bear\.ru/$SUBDOMAIN/g" /root/scripts/nginx-api-subdomain.conf > /tmp/nginx-api-subdomain.conf
+sudo cp /tmp/nginx-api-subdomain.conf "$CONFIG_FILE"
+sudo ln -sf "$CONFIG_FILE" /etc/nginx/sites-enabled/$CONFIG_NAME
+rm -f /tmp/nginx-api-subdomain.conf
 
 # Временная конфигурация для certbot
 echo ""
 echo "📝 Создание временной конфигурации для получения SSL сертификата..."
-sudo tee /etc/nginx/sites-available/api-veil-bear > /dev/null <<EOF
+sudo tee "$CONFIG_FILE" > /dev/null <<EOF
 server {
     listen 80;
     listen [::]:80;

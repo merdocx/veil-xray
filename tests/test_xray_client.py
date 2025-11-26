@@ -13,87 +13,81 @@ def xray_client():
 @pytest.mark.asyncio
 async def test_add_user_success(xray_client):
     """Тест успешного добавления пользователя"""
-    with patch("httpx.AsyncClient") as mock_client_class:
-        mock_response = MagicMock()
-        mock_response.status_code = 200
-        mock_response.text = "OK"
+    with patch("subprocess.run") as mock_run:
+        # Мокируем check_health чтобы вернуть True
+        with patch.object(xray_client, "check_health", return_value=True):
+            mock_result = MagicMock()
+            mock_result.returncode = 0
+            mock_result.stderr = ""
+            mock_result.stdout = ""
+            mock_run.return_value = mock_result
 
-        mock_client = AsyncMock()
-        mock_client.post = AsyncMock(return_value=mock_response)
-        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
-        mock_client.__aexit__ = AsyncMock(return_value=None)
-        mock_client_class.return_value = mock_client
-
-        result = await xray_client.add_user("test-uuid", "test@example.com")
-        assert result is True
+            result = await xray_client.add_user("test-uuid", "test@example.com")
+            assert result is True
 
 
 @pytest.mark.asyncio
 async def test_add_user_failure(xray_client):
     """Тест неудачного добавления пользователя"""
-    with patch("httpx.AsyncClient") as mock_client_class:
-        mock_response = MagicMock()
-        mock_response.status_code = 500
-        mock_response.text = "Error"
+    with patch("subprocess.run") as mock_run:
+        # Мокируем check_health чтобы вернуть True
+        with patch.object(xray_client, "check_health", return_value=True):
+            mock_result = MagicMock()
+            mock_result.returncode = 1
+            mock_result.stderr = "Error adding user"
+            mock_result.stdout = ""
+            mock_run.return_value = mock_result
 
-        mock_client = AsyncMock()
-        mock_client.post = AsyncMock(return_value=mock_response)
-        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
-        mock_client.__aexit__ = AsyncMock(return_value=None)
-        mock_client_class.return_value = mock_client
-
-        result = await xray_client.add_user("test-uuid", "test@example.com")
-        assert result is False
+            result = await xray_client.add_user("test-uuid", "test@example.com")
+            assert result is False
 
 
 @pytest.mark.asyncio
 async def test_add_user_exception(xray_client):
     """Тест обработки исключения при добавлении пользователя"""
-    with patch("httpx.AsyncClient") as mock_client_class:
-        mock_client = AsyncMock()
-        mock_client.post = AsyncMock(side_effect=Exception("Connection error"))
-        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
-        mock_client.__aexit__ = AsyncMock(return_value=None)
-        mock_client_class.return_value = mock_client
+    with patch("subprocess.run") as mock_run:
+        # Мокируем check_health чтобы вернуть True
+        with patch.object(xray_client, "check_health", return_value=True):
+            import subprocess
 
-        result = await xray_client.add_user("test-uuid", "test@example.com")
-        assert result is False
+            mock_run.side_effect = subprocess.TimeoutExpired("xray", 10)
+
+            result = await xray_client.add_user("test-uuid", "test@example.com")
+            assert result is False
 
 
 @pytest.mark.asyncio
 async def test_remove_user_success(xray_client):
     """Тест успешного удаления пользователя"""
-    with patch("httpx.AsyncClient") as mock_client_class:
-        mock_response = MagicMock()
-        mock_response.status_code = 200
-        mock_response.text = "OK"
+    with patch("subprocess.run") as mock_run:
+        # Мокируем check_health чтобы вернуть True
+        with patch.object(xray_client, "check_health", return_value=True):
+            mock_result = MagicMock()
+            mock_result.returncode = 0
+            mock_result.stderr = ""
+            mock_result.stdout = ""
+            mock_run.return_value = mock_result
 
-        mock_client = AsyncMock()
-        mock_client.post = AsyncMock(return_value=mock_response)
-        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
-        mock_client.__aexit__ = AsyncMock(return_value=None)
-        mock_client_class.return_value = mock_client
-
-        result = await xray_client.remove_user("test@example.com")
-        assert result is True
+            result = await xray_client.remove_user("test@example.com")
+            assert result is True
 
 
 @pytest.mark.asyncio
 async def test_remove_user_failure(xray_client):
     """Тест неудачного удаления пользователя"""
-    with patch("httpx.AsyncClient") as mock_client_class:
-        mock_response = MagicMock()
-        mock_response.status_code = 404
-        mock_response.text = "Not found"
+    with patch("subprocess.run") as mock_run:
+        # Мокируем check_health чтобы вернуть True
+        with patch.object(xray_client, "check_health", return_value=True):
+            mock_result = MagicMock()
+            mock_result.returncode = 1
+            mock_result.stderr = "Error removing user"
+            mock_result.stdout = ""
+            mock_run.return_value = mock_result
 
-        mock_client = AsyncMock()
-        mock_client.post = AsyncMock(return_value=mock_response)
-        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
-        mock_client.__aexit__ = AsyncMock(return_value=None)
-        mock_client_class.return_value = mock_client
-
-        result = await xray_client.remove_user("test@example.com")
-        assert result is False
+            result = await xray_client.remove_user("test@example.com")
+            # Если пользователь не найден, возвращается True (это нормально)
+            # Но если другая ошибка, то False
+            assert result is False
 
 
 @pytest.mark.asyncio

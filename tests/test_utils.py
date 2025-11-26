@@ -74,7 +74,11 @@ def test_generate_reality_keys():
     import base64
 
     try:
-        base64.b64decode(public_key)
+        # Публичный ключ в URL-safe формате (без padding)
+        # Добавляем padding если нужно
+        public_key_padded = public_key + "=" * (4 - len(public_key) % 4)
+        base64.urlsafe_b64decode(public_key_padded)
+        # Приватный ключ в стандартном base64 формате
         base64.b64decode(private_key)
     except Exception:
         pytest.fail("Keys are not valid base64")

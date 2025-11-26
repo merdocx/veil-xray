@@ -110,15 +110,9 @@ class XrayClient:
                     "protocol": "vless",
                     "port": 443,
                     "settings": {
-                        "clients": [
-                            {
-                                "id": uuid,
-                                "flow": flow,
-                                "email": email
-                            }
-                        ],
-                        "decryption": "none"
-                    }
+                        "clients": [{"id": uuid, "flow": flow, "email": email}],
+                        "decryption": "none",
+                    },
                 }
             ]
         }
@@ -140,14 +134,11 @@ class XrayClient:
                     "adu",
                     f"--server={server}",
                     f"--timeout={int(self.timeout)}",
-                    tmp_config_path
+                    tmp_config_path,
                 ]
 
                 result = subprocess.run(
-                    cmd,
-                    capture_output=True,
-                    text=True,
-                    timeout=self.timeout
+                    cmd, capture_output=True, text=True, timeout=self.timeout
                 )
 
                 if result.returncode == 0:
@@ -179,9 +170,7 @@ class XrayClient:
     @retry(
         stop=stop_after_attempt(3),
         wait=wait_exponential(multiplier=1, min=2, max=10),
-        retry=retry_if_exception_type(
-            (subprocess.TimeoutExpired, FileNotFoundError)
-        ),
+        retry=retry_if_exception_type((subprocess.TimeoutExpired, FileNotFoundError)),
         reraise=True,
         before_sleep=lambda retry_state: logger.warning(
             f"🔄 Retrying add_user (attempt {retry_state.attempt_number}/3) "
@@ -252,14 +241,11 @@ class XrayClient:
                 f"--server={server}",
                 f"--timeout={int(self.timeout)}",
                 "--tag=vless-reality",
-                email
+                email,
             ]
 
             result = subprocess.run(
-                cmd,
-                capture_output=True,
-                text=True,
-                timeout=self.timeout
+                cmd, capture_output=True, text=True, timeout=self.timeout
             )
 
             if result.returncode == 0:
@@ -290,9 +276,7 @@ class XrayClient:
     @retry(
         stop=stop_after_attempt(3),
         wait=wait_exponential(multiplier=1, min=2, max=10),
-        retry=retry_if_exception_type(
-            (subprocess.TimeoutExpired, FileNotFoundError)
-        ),
+        retry=retry_if_exception_type((subprocess.TimeoutExpired, FileNotFoundError)),
         reraise=True,
         before_sleep=lambda retry_state: logger.warning(
             f"🔄 Retrying remove_user (attempt {retry_state.attempt_number}/3) "
