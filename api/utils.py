@@ -87,8 +87,12 @@ def build_vless_link(
         "pbk": public_key,
         "sid": short_id,
         "spx": "/",
-        "flow": flow,
     }
+    
+    # Добавляем flow только если он указан и не равен "none"
+    # Некоторые клиенты (например, v2raytun) не поддерживают flow=none
+    if flow and flow.lower() != "none":
+        params["flow"] = flow
 
     # Формирование параметров запроса
     query_params = "&".join([f"{k}={v}" for k, v in params.items()])

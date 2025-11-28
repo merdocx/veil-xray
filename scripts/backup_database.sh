@@ -52,3 +52,6 @@ echo "[$(date +"%Y-%m-%d %H:%M:%S")] Cleanup completed. Remaining backups: $DELE
 
 exit 0
 
+
+
+
