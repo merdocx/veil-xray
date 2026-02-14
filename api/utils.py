@@ -2,6 +2,8 @@
 import uuid
 import secrets
 import string
+import re
+from typing import Optional, Tuple
 from cryptography.hazmat.primitives.asymmetric import x25519
 from cryptography.hazmat.primitives import serialization
 import base64
@@ -101,3 +103,44 @@ def build_vless_link(
     vless_link = f"vless://{uuid}@{server_address}:{port}" f"?{query_params}" f"#{dest}"
 
     return vless_link
+
+
+def parse_key_identifier(identifier: str) -> Tuple[Optional[str], Optional[int], bool]:
+    """
+    Определение типа идентификатора ключа (UUID или key_id)
+    
+    Args:
+        identifier: Идентификатор ключа (может быть UUID или key_id)
+        
+    Returns:
+        Кортеж (uuid, key_id, is_uuid):
+        - uuid: UUID строка, если identifier является UUID, иначе None
+        - key_id: Целое число, если identifier является key_id, иначе None
+        - is_uuid: True если это UUID, False если key_id
+        
+    Raises:
+        ValueError: Если формат идентификатора неверный
+    """
+    # UUID содержит дефисы и имеет формат: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
+    uuid_pattern = re.compile(
+        r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$',
+        re.IGNORECASE
+    )
+    
+    if "-" in identifier:
+        # Проверяем, является ли это валидным UUID
+        if uuid_pattern.match(identifier):
+            return identifier, None, True
+        else:
+            raise ValueError(f"Invalid UUID format: {identifier}")
+    else:
+        # Пытаемся преобразовать в key_id
+        try:
+            key_id = int(identifier)
+            if key_id <= 0:
+                raise ValueError(f"key_id must be positive, got: {key_id}")
+            return None, key_id, False
+        except ValueError:
+            raise ValueError(
+                f"Invalid identifier format: {identifier}. Expected UUID or positive integer key_id"
+            )

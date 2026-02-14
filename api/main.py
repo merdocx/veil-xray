@@ -1,8 +1,8 @@
 """Основной файл API сервера"""
-from fastapi import FastAPI, Depends, HTTPException, status, BackgroundTasks, Request
+from fastapi import FastAPI, Depends, HTTPException, status, BackgroundTasks, Request, Path as PathParam
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import RedirectResponse
+from fastapi.responses import RedirectResponse, JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware
 from sqlalchemy.orm import Session
 from typing import List
@@ -26,8 +26,12 @@ from api.models import (
 from api.xray_client import XrayClient
 from api.xray_config import XrayConfigManager
 from api.task_queue import config_task_queue, TaskType
-from api.utils import generate_uuid, generate_short_id, build_vless_link
+from api.utils import generate_uuid, generate_short_id, build_vless_link, parse_key_identifier
 from config.settings import settings
+
+# Простой in-memory кэш для статистики трафика
+traffic_cache: dict[int, tuple[int, int, int]] = {}  # key_id -> (upload, download, timestamp)
+CACHE_TTL = 30  # TTL кэша в секундах
 
 # Настройка логирования
 def setup_logging():
@@ -81,7 +85,7 @@ logger = logging.getLogger(__name__)
 app = FastAPI(
     title="Veil Xray API",
     description="API для управления VLESS+Reality VPN сервером",
-    version="1.3.5",
+    version="1.3.7",
 )
 
 
@@ -134,6 +138,49 @@ class LoggingMiddleware(BaseHTTPMiddleware):
             raise
 
 
+# Middleware для проверки IP whitelist
+class IPWhitelistMiddleware(BaseHTTPMiddleware):
+    """Middleware для проверки IP whitelist - разрешает запросы только с разрешенных IP"""
+
+    def __init__(self, app, allowed_ips: list[str]):
+        super().__init__(app)
+        self.allowed_ips = set(allowed_ips)
+
+    async def dispatch(self, request: Request, call_next):
+        # Разрешаем запросы к корневому эндпоинту и документации без проверки IP
+        if request.url.path in ["/", "/docs", "/openapi.json", "/redoc"]:
+            return await call_next(request)
+
+        # Получаем реальный IP клиента
+        # Проверяем заголовки, которые устанавливает reverse proxy
+        client_ip = (
+            request.headers.get("X-Real-IP")
+            or (request.headers.get("X-Forwarded-For", "").split(",")[0].strip() if request.headers.get("X-Forwarded-For") else None)
+            or (request.client.host if request.client else None)
+        )
+
+        # Если IP не определен или не в whitelist, блокируем
+        if not client_ip:
+            logger.warning(
+                f"⚠️  Access denied: IP address could not be determined for {request.url.path}"
+            )
+            return JSONResponse(
+                status_code=status.HTTP_403_FORBIDDEN,
+                content={"detail": "Access denied. Your IP address is not authorized."},
+            )
+
+        if client_ip in self.allowed_ips:
+            return await call_next(request)
+        else:
+            logger.warning(
+                f"⚠️  Access denied for IP {client_ip} to {request.url.path}"
+            )
+            return JSONResponse(
+                status_code=status.HTTP_403_FORBIDDEN,
+                content={"detail": "Access denied. Your IP address is not authorized."},
+            )
+
+
 # Middleware для принудительного HTTPS (если используется reverse proxy)
 class ForceHTTPSMiddleware(BaseHTTPMiddleware):
     """Middleware для принудительного перенаправления HTTP -> HTTPS"""
@@ -155,6 +202,10 @@ class ForceHTTPSMiddleware(BaseHTTPMiddleware):
 
 # Добавляем middleware для логирования запросов и ошибок
 app.add_middleware(LoggingMiddleware)
+
+# Добавляем middleware для проверки IP whitelist
+# Разрешаем запросы только с указанного IP адреса
+app.add_middleware(IPWhitelistMiddleware, allowed_ips=["77.246.105.29"])
 
 # Добавляем middleware для принудительного HTTPS (только если используется reverse proxy)
 # Раскомментируйте следующую строку, если хотите включить принудительное перенаправление на уровне приложения
@@ -305,7 +356,9 @@ async def sync_all_traffic_stats():
         try:
             await asyncio.sleep(60)  # Обновление каждую минуту
 
-            db: Session = next(get_db())
+            # Используем правильный контекстный менеджер для сессии БД
+            db_gen = get_db()
+            db: Session = next(db_gen)
             try:
                 keys = db.query(Key).filter(Key.is_active == 1).all()
 
@@ -325,16 +378,32 @@ async def sync_all_traffic_stats():
                         )
 
                         if traffic_stat:
+                            # Не перезаписываем нулевые значения, если они были установлены недавно (после reset)
+                            # Проверяем, был ли трафик обнулён недавно (в последние 5 минут)
+                            time_since_update = int(time.time()) - traffic_stat.updated_at
+                            is_recently_reset = (
+                                traffic_stat.upload == 0
+                                and traffic_stat.download == 0
+                                and time_since_update < 300  # 5 минут
+                            )
+                            
                             if (
                                 traffic_stat.upload != upload
                                 or traffic_stat.download != download
                             ):
-                                traffic_stat.upload = upload
-                                traffic_stat.download = download
-                                traffic_stat.updated_at = int(time.time())
-                                logger.info(
-                                    f"Auto-updated stats for key {key.id}: upload={upload}, download={download}"
-                                )
+                                # Если трафик был недавно обнулён, не перезаписываем его из Xray
+                                if is_recently_reset:
+                                    logger.debug(
+                                        f"Skipping sync for key {key.id}: traffic was recently reset "
+                                        f"({time_since_update}s ago)"
+                                    )
+                                else:
+                                    traffic_stat.upload = upload
+                                    traffic_stat.download = download
+                                    traffic_stat.updated_at = int(time.time())
+                                    logger.info(
+                                        f"Auto-updated stats for key {key.id}: upload={upload}, download={download}"
+                                    )
                         else:
                             traffic_stat = TrafficStats(
                                 key_id=key.id,
@@ -350,7 +419,11 @@ async def sync_all_traffic_stats():
                         logger.error(f"Error syncing stats for key {key.id}: {e}")
                         db.rollback()
             finally:
-                db.close()
+                # Правильно закрываем генератор сессии
+                try:
+                    next(db_gen, None)
+                except StopIteration:
+                    pass
 
         except Exception as e:
             logger.error(f"Error in background traffic sync: {e}")
@@ -549,9 +622,21 @@ async def create_key(
             is_active=bool(new_key.is_active),  # type: ignore
         )
 
+    except HTTPException:
+        raise
     except Exception as e:
         db.rollback()
         logger.error(f"Error creating key: {e}")
+        
+        # Проверяем, является ли ошибка IntegrityError (дублирование UUID)
+        from sqlalchemy.exc import IntegrityError
+        if isinstance(e, IntegrityError):
+            logger.warning(f"Attempted to create key with duplicate UUID: {e}")
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="A key with this UUID already exists. Please try again.",
+            )
+        
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to create key: {str(e)}",
@@ -570,20 +655,19 @@ async def delete_key(
     - Удаляет ключ из базы данных
     """
     try:
-        # Пытаемся определить, это UUID или key_id
-        if "-" in identifier:
-            # Это UUID
-            key = db.query(Key).filter(Key.uuid == identifier).first()
+        # Определяем тип идентификатора (UUID или key_id)
+        try:
+            uuid_value, key_id_value, is_uuid = parse_key_identifier(identifier)
+        except ValueError as e:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=str(e),
+            )
+        
+        if is_uuid:
+            key = db.query(Key).filter(Key.uuid == uuid_value).first()
         else:
-            # Это key_id
-            try:
-                key_id = int(identifier)
-                key = db.query(Key).filter(Key.id == key_id).first()
-            except ValueError:
-                raise HTTPException(
-                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                    detail=f"Invalid identifier format: {identifier}. Expected UUID or key_id",
-                )
+            key = db.query(Key).filter(Key.id == key_id_value).first()
 
         if not key:
             raise HTTPException(
@@ -683,7 +767,9 @@ async def delete_key(
 
 @app.get("/api/keys/{key_id}/traffic", response_model=TrafficResponse, tags=["Traffic"])
 async def get_traffic(
-    key_id: int, token: str = Depends(verify_token), db: Session = Depends(get_db)
+    key_id: int = PathParam(..., gt=0, description="ID ключа (должен быть положительным числом)"),
+    token: str = Depends(verify_token),
+    db: Session = Depends(get_db),
 ):
     """
     Получение статистики трафика по ключу
@@ -700,12 +786,25 @@ async def get_traffic(
                 detail=f"Key with id {key_id} not found",
             )
 
-        # Получение статистики из Xray
-        email = f"user_{key.id}_{key.uuid[:8]}"
-        xray_stats = await xray_client.get_user_stats(email)
+        # Проверяем кэш статистики трафика
+        current_time = int(time.time())
+        cached_stats = traffic_cache.get(key_id)
+        
+        if cached_stats and (current_time - cached_stats[2]) < CACHE_TTL:
+            # Используем кэшированные значения
+            upload = cached_stats[0]
+            download = cached_stats[1]
+            logger.debug(f"Using cached traffic stats for key {key_id}")
+        else:
+            # Получение статистики из Xray
+            email = f"user_{key.id}_{key.uuid[:8]}"
+            xray_stats = await xray_client.get_user_stats(email)
 
-        upload = xray_stats.get("upload", 0)
-        download = xray_stats.get("download", 0)
+            upload = xray_stats.get("upload", 0)
+            download = xray_stats.get("download", 0)
+            
+            # Сохраняем в кэш
+            traffic_cache[key_id] = (upload, download, current_time)
 
         # Обновление статистики в базе данных
         traffic_stat = (
@@ -713,9 +812,27 @@ async def get_traffic(
         )
 
         if traffic_stat:
-            traffic_stat.upload = upload  # type: ignore
-            traffic_stat.download = download  # type: ignore
-            traffic_stat.updated_at = int(time.time())  # type: ignore
+            # Не перезаписываем нулевые значения, если они были установлены недавно (после reset)
+            # Проверяем, был ли трафик обнулён недавно (в последние 5 минут)
+            time_since_update = int(time.time()) - traffic_stat.updated_at
+            is_recently_reset = (
+                traffic_stat.upload == 0
+                and traffic_stat.download == 0
+                and time_since_update < 300  # 5 минут
+            )
+            
+            if is_recently_reset:
+                # Возвращаем нулевые значения из БД, не синхронизируя из Xray
+                logger.debug(
+                    f"Returning reset traffic for key {key_id} (reset {time_since_update}s ago)"
+                )
+                upload = 0
+                download = 0
+            else:
+                # Синхронизируем из Xray
+                traffic_stat.upload = upload  # type: ignore
+                traffic_stat.download = download  # type: ignore
+                traffic_stat.updated_at = int(time.time())  # type: ignore
         else:
             traffic_stat = TrafficStats(
                 key_id=key_id,
@@ -757,20 +874,19 @@ async def get_vless_link(
     - Включает все необходимые параметры Reality
     """
     try:
-        # Пытаемся определить, это UUID или key_id
-        if "-" in identifier:
-            # Это UUID
-            key = db.query(Key).filter(Key.uuid == identifier).first()
+        # Определяем тип идентификатора (UUID или key_id)
+        try:
+            uuid_value, key_id_value, is_uuid = parse_key_identifier(identifier)
+        except ValueError as e:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=str(e),
+            )
+        
+        if is_uuid:
+            key = db.query(Key).filter(Key.uuid == uuid_value).first()
         else:
-            # Это key_id
-            try:
-                key_id = int(identifier)
-                key = db.query(Key).filter(Key.id == key_id).first()
-            except ValueError:
-                raise HTTPException(
-                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                    detail=f"Invalid identifier format: {identifier}. Expected UUID or key_id",
-                )
+            key = db.query(Key).filter(Key.id == key_id_value).first()
 
         if not key:
             raise HTTPException(
@@ -879,21 +995,19 @@ async def get_key_config(
     Поддерживает оба формата: /api/keys/{uuid}/config и /api/keys/{key_id}/config
     """
     try:
-        # Пытаемся определить, это UUID или key_id
-        # UUID содержит дефисы, key_id - число
-        if "-" in identifier:
-            # Это UUID
-            key = db.query(Key).filter(Key.uuid == identifier).first()
+        # Определяем тип идентификатора (UUID или key_id)
+        try:
+            uuid_value, key_id_value, is_uuid = parse_key_identifier(identifier)
+        except ValueError as e:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=str(e),
+            )
+        
+        if is_uuid:
+            key = db.query(Key).filter(Key.uuid == uuid_value).first()
         else:
-            # Это key_id
-            try:
-                key_id = int(identifier)
-                key = db.query(Key).filter(Key.id == key_id).first()
-            except ValueError:
-                raise HTTPException(
-                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                    detail=f"Invalid identifier format: {identifier}. Expected UUID or key_id",
-                )
+            key = db.query(Key).filter(Key.id == key_id_value).first()
 
         if not key:
             raise HTTPException(
@@ -963,20 +1077,19 @@ async def get_key(
     Поддерживает оба формата: /api/keys/{uuid} и /api/keys/{key_id}
     """
     try:
-        # Пытаемся определить, это UUID или key_id
-        if "-" in identifier:
-            # Это UUID
-            key = db.query(Key).filter(Key.uuid == identifier).first()
+        # Определяем тип идентификатора (UUID или key_id)
+        try:
+            uuid_value, key_id_value, is_uuid = parse_key_identifier(identifier)
+        except ValueError as e:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=str(e),
+            )
+        
+        if is_uuid:
+            key = db.query(Key).filter(Key.uuid == uuid_value).first()
         else:
-            # Это key_id
-            try:
-                key_id = int(identifier)
-                key = db.query(Key).filter(Key.id == key_id).first()
-            except ValueError:
-                raise HTTPException(
-                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                    detail=f"Invalid identifier format: {identifier}. Expected UUID or key_id",
-                )
+            key = db.query(Key).filter(Key.id == key_id_value).first()
 
         if not key:
             raise HTTPException(
@@ -1229,8 +1342,9 @@ async def sync_all_traffic(
 
         updated_count = 0
         error_count = 0
+        batch_size = 50  # Размер батча для коммитов
 
-        for key in keys:
+        for i, key in enumerate(keys):
             try:
                 email = f"user_{key.id}_{key.uuid[:8]}"
                 xray_stats = await xray_client.get_user_stats(email)
@@ -1246,9 +1360,25 @@ async def sync_all_traffic(
                 )
 
                 if traffic_stat:
-                    traffic_stat.upload = upload  # type: ignore
-                    traffic_stat.download = download  # type: ignore
-                    traffic_stat.updated_at = int(time.time())  # type: ignore
+                    # Не перезаписываем нулевые значения, если они были установлены недавно (после reset)
+                    # Проверяем, был ли трафик обнулён недавно (в последние 5 минут)
+                    time_since_update = int(time.time()) - traffic_stat.updated_at
+                    is_recently_reset = (
+                        traffic_stat.upload == 0
+                        and traffic_stat.download == 0
+                        and time_since_update < 300  # 5 минут
+                    )
+                    
+                    if not is_recently_reset:
+                        traffic_stat.upload = upload  # type: ignore
+                        traffic_stat.download = download  # type: ignore
+                        traffic_stat.updated_at = int(time.time())  # type: ignore
+                        updated_count += 1
+                    else:
+                        logger.debug(
+                            f"Skipping sync for key {key.id}: traffic was recently reset "
+                            f"({time_since_update}s ago)"
+                        )
                 else:
                     traffic_stat = TrafficStats(
                         key_id=key.id,
@@ -1257,12 +1387,19 @@ async def sync_all_traffic(
                         updated_at=int(time.time()),
                     )
                     db.add(traffic_stat)
+                    updated_count += 1
 
-                updated_count += 1
+                # Коммитим батчами для лучшей производительности и надежности
+                if (i + 1) % batch_size == 0:
+                    db.commit()
+                    logger.debug(f"Committed batch of {batch_size} keys")
+
             except Exception as e:
                 error_count += 1
                 logger.error(f"Error syncing stats for key {key.id}: {e}")
+                db.rollback()  # Откатываем только текущий ключ
 
+        # Финальный коммит для оставшихся записей
         db.commit()
 
         return {
@@ -1287,12 +1424,15 @@ async def sync_all_traffic(
     tags=["Traffic"],
 )
 async def reset_traffic(
-    key_id: int, token: str = Depends(verify_token), db: Session = Depends(get_db)
+    key_id: int = PathParam(..., gt=0, description="ID ключа (должен быть положительным числом)"),
+    token: str = Depends(verify_token),
+    db: Session = Depends(get_db),
 ):
     """
     Обнуление статистики трафика по конкретному ключу
 
     - Обнуляет значения upload и download в базе данных
+    - Обнуляет статистику в Xray (удаляет и заново добавляет пользователя)
     - Сохраняет предыдущие значения в ответе
     - Обновляет timestamp последнего обновления
     """
@@ -1303,6 +1443,13 @@ async def reset_traffic(
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail=f"Key with id {key_id} not found",
+            )
+
+        # Проверяем, что ключ активен
+        if not key.is_active:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Cannot reset traffic for inactive key {key_id}",
             )
 
         # Получаем текущую статистику
@@ -1323,12 +1470,44 @@ async def reset_traffic(
             previous_upload = traffic_stat.upload  # type: ignore
             previous_download = traffic_stat.download  # type: ignore
 
-            # Обнуляем статистику
+            # Обнуляем статистику в БД
             traffic_stat.upload = 0  # type: ignore
             traffic_stat.download = 0  # type: ignore
             traffic_stat.updated_at = int(time.time())  # type: ignore
 
         db.commit()
+
+        # Очищаем кэш статистики для этого ключа
+        traffic_cache.pop(key_id, None)
+
+        # Обнуляем статистику в Xray путем удаления и повторного добавления пользователя
+        # Это единственный способ обнулить статистику в Xray, так как прямого API для этого нет
+        email = f"user_{key.id}_{key.uuid[:8]}"
+        try:
+            # Удаляем пользователя из Xray
+            removed = await xray_client.remove_user(email)
+            if removed:
+                logger.info(f"✅ User {email} removed from Xray for traffic reset")
+                # Добавляем пользователя обратно (это обнулит статистику в Xray)
+                added = await xray_client.add_user(key.uuid, email, flow="none")
+                if added:
+                    logger.info(f"✅ User {email} re-added to Xray, traffic reset")
+                else:
+                    logger.warning(
+                        f"⚠️  Failed to re-add user {email} to Xray after traffic reset. "
+                        f"Traffic reset in DB completed, but Xray stats may not be reset."
+                    )
+            else:
+                logger.warning(
+                    f"⚠️  Failed to remove user {email} from Xray for traffic reset. "
+                    f"Traffic reset in DB completed, but Xray stats may not be reset."
+                )
+        except Exception as xray_error:
+            # Если не удалось обнулить в Xray, это не критично - трафик в БД уже обнулён
+            logger.warning(
+                f"⚠️  Error resetting traffic in Xray for key {key_id}: {xray_error}. "
+                f"Traffic reset in DB completed successfully."
+            )
 
         logger.info(
             f"🔄 Traffic reset for key {key_id}: "
