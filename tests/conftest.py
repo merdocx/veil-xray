@@ -127,6 +127,7 @@ def mock_xray_client(monkeypatch):
     # Мокируем методы XrayClient
     mock_client.add_user = AsyncMock(return_value=True)
     mock_client.remove_user = AsyncMock(return_value=True)
+    mock_client.reset_user_stats = AsyncMock(return_value=True)
     mock_client.get_stats = AsyncMock(return_value={"stat": []})
     mock_client.get_user_stats = AsyncMock(return_value={"upload": 0, "download": 0})
 

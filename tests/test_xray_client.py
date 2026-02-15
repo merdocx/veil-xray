@@ -1,4 +1,5 @@
 """Тесты для XrayClient"""
+import subprocess
 import pytest
 from unittest.mock import AsyncMock, patch, MagicMock
 from api.xray_client import XrayClient
@@ -13,7 +14,7 @@ def xray_client():
 @pytest.mark.asyncio
 async def test_add_user_success(xray_client):
     """Тест успешного добавления пользователя"""
-    with patch("subprocess.run") as mock_run:
+    with patch("api.xray_client.subprocess.run") as mock_run:
         # Мокируем check_health чтобы вернуть True
         with patch.object(xray_client, "check_health", return_value=True):
             mock_result = MagicMock()
@@ -29,7 +30,7 @@ async def test_add_user_success(xray_client):
 @pytest.mark.asyncio
 async def test_add_user_failure(xray_client):
     """Тест неудачного добавления пользователя"""
-    with patch("subprocess.run") as mock_run:
+    with patch("api.xray_client.subprocess.run") as mock_run:
         # Мокируем check_health чтобы вернуть True
         with patch.object(xray_client, "check_health", return_value=True):
             mock_result = MagicMock()
@@ -45,7 +46,7 @@ async def test_add_user_failure(xray_client):
 @pytest.mark.asyncio
 async def test_add_user_exception(xray_client):
     """Тест обработки исключения при добавлении пользователя"""
-    with patch("subprocess.run") as mock_run:
+    with patch("api.xray_client.subprocess.run") as mock_run:
         # Мокируем check_health чтобы вернуть True
         with patch.object(xray_client, "check_health", return_value=True):
             import subprocess
@@ -59,7 +60,7 @@ async def test_add_user_exception(xray_client):
 @pytest.mark.asyncio
 async def test_remove_user_success(xray_client):
     """Тест успешного удаления пользователя"""
-    with patch("subprocess.run") as mock_run:
+    with patch("api.xray_client.subprocess.run") as mock_run:
         # Мокируем check_health чтобы вернуть True
         with patch.object(xray_client, "check_health", return_value=True):
             mock_result = MagicMock()
@@ -75,7 +76,7 @@ async def test_remove_user_success(xray_client):
 @pytest.mark.asyncio
 async def test_remove_user_failure(xray_client):
     """Тест неудачного удаления пользователя"""
-    with patch("subprocess.run") as mock_run:
+    with patch("api.xray_client.subprocess.run") as mock_run:
         # Мокируем check_health чтобы вернуть True
         with patch.object(xray_client, "check_health", return_value=True):
             mock_result = MagicMock()
@@ -93,7 +94,7 @@ async def test_remove_user_failure(xray_client):
 @pytest.mark.asyncio
 async def test_get_stats_success(xray_client):
     """Тест успешного получения статистики"""
-    with patch("subprocess.run") as mock_run:
+    with patch("api.xray_client.subprocess.run") as mock_run:
         mock_result = MagicMock()
         mock_result.returncode = 0
         mock_result.stdout = (
@@ -109,7 +110,7 @@ async def test_get_stats_success(xray_client):
 @pytest.mark.asyncio
 async def test_get_stats_no_email(xray_client):
     """Тест получения статистики без email"""
-    with patch("subprocess.run") as mock_run:
+    with patch("api.xray_client.subprocess.run") as mock_run:
         mock_result = MagicMock()
         mock_result.returncode = 0
         mock_result.stdout = '{"stat": []}'
@@ -123,7 +124,7 @@ async def test_get_stats_no_email(xray_client):
 @pytest.mark.asyncio
 async def test_get_stats_timeout(xray_client):
     """Тест обработки таймаута при получении статистики"""
-    with patch("subprocess.run") as mock_run:
+    with patch("api.xray_client.subprocess.run") as mock_run:
         import subprocess
 
         mock_run.side_effect = subprocess.TimeoutExpired("xray", 5)
@@ -135,7 +136,7 @@ async def test_get_stats_timeout(xray_client):
 @pytest.mark.asyncio
 async def test_get_stats_file_not_found(xray_client):
     """Тест обработки отсутствия бинарника Xray"""
-    with patch("subprocess.run") as mock_run:
+    with patch("api.xray_client.subprocess.run") as mock_run:
         mock_run.side_effect = FileNotFoundError()
 
         result = await xray_client.get_stats()
@@ -145,7 +146,7 @@ async def test_get_stats_file_not_found(xray_client):
 @pytest.mark.asyncio
 async def test_get_stats_invalid_json(xray_client):
     """Тест обработки невалидного JSON"""
-    with patch("subprocess.run") as mock_run:
+    with patch("api.xray_client.subprocess.run") as mock_run:
         mock_result = MagicMock()
         mock_result.returncode = 0
         mock_result.stdout = "not json"
@@ -181,3 +182,30 @@ async def test_get_user_stats_empty(xray_client):
         result = await xray_client.get_user_stats("test@example.com")
         assert result["upload"] == 0
         assert result["download"] == 0
+
+
+@pytest.mark.asyncio
+async def test_reset_user_stats_success(xray_client):
+    """Тест сброса статистики пользователя в Xray (statsquery -reset=true)"""
+    with patch("api.xray_client.subprocess.run") as mock_run:
+        mock_run.return_value = subprocess.CompletedProcess(
+            args=[], returncode=0, stdout="", stderr=""
+        )
+        result = await xray_client.reset_user_stats("user_1_abc12345")
+        assert result is True
+        mock_run.assert_called_once()
+        call_args = mock_run.call_args[0][0]
+        assert "statsquery" in call_args
+        assert "-reset=true" in call_args
+        assert "user>>>user_1_abc12345>>>" in call_args
+
+
+@pytest.mark.asyncio
+async def test_reset_user_stats_failure(xray_client):
+    """Тест сброса статистики при ошибке Xray"""
+    with patch("api.xray_client.subprocess.run") as mock_run:
+        mock_run.return_value = subprocess.CompletedProcess(
+            args=[], returncode=1, stdout="", stderr="error"
+        )
+        result = await xray_client.reset_user_stats("user_1_abc12345")
+        assert result is False

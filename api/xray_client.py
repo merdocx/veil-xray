@@ -371,6 +371,56 @@ class XrayClient:
             logger.error(f"Error getting stats from Xray: {e}")
             return {}
 
+    async def reset_user_stats(self, email: str) -> bool:
+        """
+        Сброс статистики трафика для пользователя в Xray через statsquery -reset=true.
+
+        Сбрасываются только счётчики, совпадающие с pattern user>>>email>>>,
+        остальные пользователи и инбаунды не затрагиваются.
+
+        Args:
+            email: Email/идентификатор пользователя (как в конфиге Xray)
+
+        Returns:
+            True если сброс выполнен успешно, False при ошибке
+        """
+        try:
+            server = f"{settings.xray_api_host}:{settings.xray_api_port}"
+            pattern = f"user>>>{email}>>>"
+            cmd = [
+                "/usr/local/bin/xray",
+                "api",
+                "statsquery",
+                f"--server={server}",
+                "--pattern",
+                pattern,
+                "-reset=true",
+            ]
+            result = subprocess.run(
+                cmd, capture_output=True, text=True, timeout=self.timeout
+            )
+            if result.returncode == 0:
+                logger.info(f"✅ User {email} traffic stats reset in Xray")
+                return True
+            logger.warning(
+                f"⚠️  statsquery -reset failed for {email}: "
+                f"returncode={result.returncode}, stderr={result.stderr or result.stdout}"
+            )
+            return False
+        except subprocess.TimeoutExpired:
+            logger.warning(
+                f"⚠️  Timeout resetting traffic in Xray for {email} (timeout: {self.timeout}s)"
+            )
+            return False
+        except FileNotFoundError:
+            logger.warning(
+                "⚠️  Xray binary not found at /usr/local/bin/xray, cannot reset stats"
+            )
+            return False
+        except Exception as e:
+            logger.warning(f"⚠️  Error resetting Xray stats for {email}: {e}")
+            return False
+
     async def get_user_stats(self, email: str) -> Dict[str, int]:
         """
         Получение статистики трафика для конкретного пользователя

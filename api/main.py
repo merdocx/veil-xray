@@ -85,7 +85,7 @@ logger = logging.getLogger(__name__)
 app = FastAPI(
     title="Veil Xray API",
     description="API для управления VLESS+Reality VPN сервером",
-    version="1.3.7",
+    version="1.3.8",
 )
 
 
@@ -378,32 +378,16 @@ async def sync_all_traffic_stats():
                         )
 
                         if traffic_stat:
-                            # Не перезаписываем нулевые значения, если они были установлены недавно (после reset)
-                            # Проверяем, был ли трафик обнулён недавно (в последние 5 минут)
-                            time_since_update = int(time.time()) - traffic_stat.updated_at
-                            is_recently_reset = (
-                                traffic_stat.upload == 0
-                                and traffic_stat.download == 0
-                                and time_since_update < 300  # 5 минут
-                            )
-                            
                             if (
                                 traffic_stat.upload != upload
                                 or traffic_stat.download != download
                             ):
-                                # Если трафик был недавно обнулён, не перезаписываем его из Xray
-                                if is_recently_reset:
-                                    logger.debug(
-                                        f"Skipping sync for key {key.id}: traffic was recently reset "
-                                        f"({time_since_update}s ago)"
-                                    )
-                                else:
-                                    traffic_stat.upload = upload
-                                    traffic_stat.download = download
-                                    traffic_stat.updated_at = int(time.time())
-                                    logger.info(
-                                        f"Auto-updated stats for key {key.id}: upload={upload}, download={download}"
-                                    )
+                                traffic_stat.upload = upload
+                                traffic_stat.download = download
+                                traffic_stat.updated_at = int(time.time())
+                                logger.info(
+                                    f"Auto-updated stats for key {key.id}: upload={upload}, download={download}"
+                                )
                         else:
                             traffic_stat = TrafficStats(
                                 key_id=key.id,
@@ -812,27 +796,9 @@ async def get_traffic(
         )
 
         if traffic_stat:
-            # Не перезаписываем нулевые значения, если они были установлены недавно (после reset)
-            # Проверяем, был ли трафик обнулён недавно (в последние 5 минут)
-            time_since_update = int(time.time()) - traffic_stat.updated_at
-            is_recently_reset = (
-                traffic_stat.upload == 0
-                and traffic_stat.download == 0
-                and time_since_update < 300  # 5 минут
-            )
-            
-            if is_recently_reset:
-                # Возвращаем нулевые значения из БД, не синхронизируя из Xray
-                logger.debug(
-                    f"Returning reset traffic for key {key_id} (reset {time_since_update}s ago)"
-                )
-                upload = 0
-                download = 0
-            else:
-                # Синхронизируем из Xray
-                traffic_stat.upload = upload  # type: ignore
-                traffic_stat.download = download  # type: ignore
-                traffic_stat.updated_at = int(time.time())  # type: ignore
+            traffic_stat.upload = upload  # type: ignore
+            traffic_stat.download = download  # type: ignore
+            traffic_stat.updated_at = int(time.time())  # type: ignore
         else:
             traffic_stat = TrafficStats(
                 key_id=key_id,
@@ -1360,25 +1326,10 @@ async def sync_all_traffic(
                 )
 
                 if traffic_stat:
-                    # Не перезаписываем нулевые значения, если они были установлены недавно (после reset)
-                    # Проверяем, был ли трафик обнулён недавно (в последние 5 минут)
-                    time_since_update = int(time.time()) - traffic_stat.updated_at
-                    is_recently_reset = (
-                        traffic_stat.upload == 0
-                        and traffic_stat.download == 0
-                        and time_since_update < 300  # 5 минут
-                    )
-                    
-                    if not is_recently_reset:
-                        traffic_stat.upload = upload  # type: ignore
-                        traffic_stat.download = download  # type: ignore
-                        traffic_stat.updated_at = int(time.time())  # type: ignore
-                        updated_count += 1
-                    else:
-                        logger.debug(
-                            f"Skipping sync for key {key.id}: traffic was recently reset "
-                            f"({time_since_update}s ago)"
-                        )
+                    traffic_stat.upload = upload  # type: ignore
+                    traffic_stat.download = download  # type: ignore
+                    traffic_stat.updated_at = int(time.time())  # type: ignore
+                    updated_count += 1
                 else:
                     traffic_stat = TrafficStats(
                         key_id=key.id,
@@ -1432,7 +1383,7 @@ async def reset_traffic(
     Обнуление статистики трафика по конкретному ключу
 
     - Обнуляет значения upload и download в базе данных
-    - Обнуляет статистику в Xray (удаляет и заново добавляет пользователя)
+    - Обнуляет счётчики этого пользователя в Xray (statsquery -reset=true)
     - Сохраняет предыдущие значения в ответе
     - Обновляет timestamp последнего обновления
     """
@@ -1480,30 +1431,16 @@ async def reset_traffic(
         # Очищаем кэш статистики для этого ключа
         traffic_cache.pop(key_id, None)
 
-        # Обнуляем статистику в Xray путем удаления и повторного добавления пользователя
-        # Это единственный способ обнулить статистику в Xray, так как прямого API для этого нет
+        # Обнуляем статистику в Xray через statsquery -reset=true (только счётчики этого пользователя)
         email = f"user_{key.id}_{key.uuid[:8]}"
         try:
-            # Удаляем пользователя из Xray
-            removed = await xray_client.remove_user(email)
-            if removed:
-                logger.info(f"✅ User {email} removed from Xray for traffic reset")
-                # Добавляем пользователя обратно (это обнулит статистику в Xray)
-                added = await xray_client.add_user(key.uuid, email, flow="none")
-                if added:
-                    logger.info(f"✅ User {email} re-added to Xray, traffic reset")
-                else:
-                    logger.warning(
-                        f"⚠️  Failed to re-add user {email} to Xray after traffic reset. "
-                        f"Traffic reset in DB completed, but Xray stats may not be reset."
-                    )
-            else:
+            reset_ok = await xray_client.reset_user_stats(email)
+            if not reset_ok:
                 logger.warning(
-                    f"⚠️  Failed to remove user {email} from Xray for traffic reset. "
-                    f"Traffic reset in DB completed, but Xray stats may not be reset."
+                    f"⚠️  Failed to reset Xray stats for {email}. "
+                    f"Traffic reset in DB completed, but Xray may still show old values until next sync."
                 )
         except Exception as xray_error:
-            # Если не удалось обнулить в Xray, это не критично - трафик в БД уже обнулён
             logger.warning(
                 f"⚠️  Error resetting traffic in Xray for key {key_id}: {xray_error}. "
                 f"Traffic reset in DB completed successfully."
