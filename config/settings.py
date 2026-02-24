@@ -34,6 +34,9 @@ class Settings(BaseSettings):
     # Это позволяет избежать перезагрузки Xray при создании/удалении ключей
     reality_common_short_id: str = "7bb45050"  # Можно изменить через .env
 
+    # Flow для VLESS (для Xray 26.x обязателен отличный от "none"; рекомендуется xtls-rprx-vision)
+    reality_flow: str = "xtls-rprx-vision"
+
     # Домен
     domain: str = "veil-bear.ru"
 

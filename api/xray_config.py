@@ -267,7 +267,7 @@ class XrayConfigManager:
                 if not email:
                     email = f"user_{uuid[:8]}"
 
-                new_client = {"id": uuid, "flow": "none", "email": email}
+                new_client = {"id": uuid, "flow": settings.reality_flow, "email": email}
                 clients.append(new_client)
                 vless_inbound["settings"]["clients"] = clients
                 logger.info(f"Added user {uuid[:8]}... to Xray config")

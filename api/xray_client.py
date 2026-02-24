@@ -1,4 +1,5 @@
 """Клиент для работы с Xray API"""
+import asyncio
 import httpx
 import json
 import subprocess
@@ -25,6 +26,11 @@ class XrayClient:
         self.timeout = 10.0
         self._is_available = None  # Кэш статуса доступности
 
+    async def _run_subprocess(self, cmd: list[str], timeout: float) -> subprocess.CompletedProcess:
+        return await asyncio.to_thread(
+            subprocess.run, cmd, capture_output=True, text=True, timeout=timeout
+        )
+
     async def check_health(self) -> bool:
         """
         Проверка доступности Xray API
@@ -42,7 +48,7 @@ class XrayClient:
             server = f"{settings.xray_api_host}:{settings.xray_api_port}"
             cmd = ["/usr/local/bin/xray", "api", "statsquery", f"--server={server}"]
 
-            result = subprocess.run(cmd, capture_output=True, text=True, timeout=5)
+            result = await self._run_subprocess(cmd, timeout=5)
 
             if result.returncode == 0:
                 self._is_available = True
@@ -84,7 +90,7 @@ class XrayClient:
         return self._is_available
 
     async def _add_user_internal(
-        self, uuid: str, email: str, flow: str = "none"
+        self, uuid: str, email: str, flow: Optional[str] = None
     ) -> bool:
         """
         Внутренний метод добавления пользователя в Xray через API (без retry)
@@ -98,6 +104,7 @@ class XrayClient:
         Returns:
             True если успешно, False в противном случае
         """
+        flow_val = flow if flow is not None else settings.reality_flow
         import tempfile
         import os
 
@@ -110,7 +117,7 @@ class XrayClient:
                     "protocol": "vless",
                     "port": 443,
                     "settings": {
-                        "clients": [{"id": uuid, "flow": flow, "email": email}],
+                        "clients": [{"id": uuid, "flow": flow_val, "email": email}],
                         "decryption": "none",
                     },
                 }
@@ -137,9 +144,7 @@ class XrayClient:
                     tmp_config_path,
                 ]
 
-                result = subprocess.run(
-                    cmd, capture_output=True, text=True, timeout=self.timeout
-                )
+                result = await self._run_subprocess(cmd, timeout=self.timeout)
 
                 if result.returncode == 0:
                     logger.info(
@@ -180,18 +185,21 @@ class XrayClient:
         if retry_state.attempt_number < 3
         else None,
     )
-    async def add_user(self, uuid: str, email: str, flow: str = "none") -> bool:
+    async def add_user(
+        self, uuid: str, email: str, flow: Optional[str] = None
+    ) -> bool:
         """
         Добавление пользователя в Xray через API с retry механизмом
 
         Args:
             uuid: UUID пользователя
             email: Email/идентификатор пользователя (используем UUID)
-            flow: Flow для VLESS (none или xtls-rprx-vision)
+            flow: Flow для VLESS (по умолчанию из settings.reality_flow)
 
         Returns:
             True если успешно, False в противном случае
         """
+        flow_val = flow if flow is not None else settings.reality_flow
         # Проверяем доступность API перед операцией
         if not await self.check_health():
             logger.warning(
@@ -201,7 +209,7 @@ class XrayClient:
             return False
 
         try:
-            return await self._add_user_internal(uuid, email, flow)
+            return await self._add_user_internal(uuid, email, flow_val)
         except subprocess.TimeoutExpired:
             logger.error(
                 f"❌ Timeout adding user {uuid[:8]}... to Xray API after retries. "
@@ -244,9 +252,7 @@ class XrayClient:
                 email,
             ]
 
-            result = subprocess.run(
-                cmd, capture_output=True, text=True, timeout=self.timeout
-            )
+            result = await self._run_subprocess(cmd, timeout=self.timeout)
 
             if result.returncode == 0:
                 logger.info(f"✅ User {email} removed successfully from Xray via API")
@@ -345,7 +351,7 @@ class XrayClient:
                 pattern = f"user>>>{email}>>>"
                 cmd.extend(["--pattern", pattern])
 
-            result = subprocess.run(cmd, capture_output=True, text=True, timeout=5)
+            result = await self._run_subprocess(cmd, timeout=5)
 
             if result.returncode == 0 and result.stdout.strip():
                 try:
@@ -396,9 +402,7 @@ class XrayClient:
                 pattern,
                 "-reset=true",
             ]
-            result = subprocess.run(
-                cmd, capture_output=True, text=True, timeout=self.timeout
-            )
+            result = await self._run_subprocess(cmd, timeout=self.timeout)
             if result.returncode == 0:
                 logger.info(f"✅ User {email} traffic stats reset in Xray")
                 return True

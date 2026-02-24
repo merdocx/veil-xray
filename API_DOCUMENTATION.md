@@ -400,7 +400,7 @@ Authorization: Bearer YOUR_SECRET_KEY
 ```json
 {
   "key_id": 1,
-  "vless_link": "vless://123e4567-e89b-12d3-a456-426614174000@your-domain.com:443?type=tcp&security=reality&sni=microsoft.com&fp=chrome&pbk=public_key_here&sid=abcd1234&spx=%2F&flow=none#user_name"
+  "vless_link": "vless://123e4567-e89b-12d3-a456-426614174000@your-domain.com:443?type=tcp&security=reality&sni=microsoft.com&fp=chrome&pbk=public_key_here&sid=abcd1234&spx=%2F&flow=xtls-rprx-vision#user_name"
 }
 ```
 

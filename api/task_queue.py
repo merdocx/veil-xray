@@ -182,8 +182,11 @@ class ConfigTaskQueue:
                     logger.error(f"Short ID is required for ADD_USER task")
                     return False
 
-                success = config_manager.add_user_to_config(
-                    uuid=task.uuid, short_id=task.short_id, email=task.email
+                success = await asyncio.to_thread(
+                    config_manager.add_user_to_config,
+                    uuid=task.uuid,
+                    short_id=task.short_id,
+                    email=task.email,
                 )
 
                 if success:
@@ -202,8 +205,10 @@ class ConfigTaskQueue:
                     logger.error(f"Short ID is required for REMOVE_USER task")
                     return False
 
-                success = config_manager.remove_user_from_config(
-                    uuid=task.uuid, short_id=task.short_id
+                success = await asyncio.to_thread(
+                    config_manager.remove_user_from_config,
+                    uuid=task.uuid,
+                    short_id=task.short_id,
                 )
 
                 if success:

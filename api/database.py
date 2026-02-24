@@ -8,8 +8,10 @@ from sqlalchemy import (
     ForeignKey,
     Index,
 )
+from sqlalchemy import event
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, relationship
+from sqlalchemy.pool import NullPool
 from config.settings import settings
 
 Base = declarative_base()  # type: ignore
@@ -64,9 +66,32 @@ if db_url.startswith("sqlite:///"):
     db_path = Path(db_url.replace("sqlite:///", ""))
     db_path.parent.mkdir(parents=True, exist_ok=True)
 
-engine = create_engine(
-    db_url, connect_args={"check_same_thread": False} if "sqlite" in db_url else {}
-)
+connect_args = {}
+engine_kwargs = {}
+
+if "sqlite" in db_url:
+    # SQLite под нагрузкой легко уходит в блокировки/ожидания. Нам важно:
+    # - включить busy timeout
+    # - включить WAL для конкурентных read/write
+    # - не упираться в лимиты QueuePool при длинных запросах
+    connect_args = {"check_same_thread": False, "timeout": 30}
+    engine_kwargs = {"poolclass": NullPool}
+
+engine = create_engine(db_url, connect_args=connect_args, **engine_kwargs)
+
+
+if "sqlite" in db_url:
+    @event.listens_for(engine, "connect")
+    def _set_sqlite_pragmas(dbapi_connection, connection_record):  # type: ignore[no-redef]
+        cursor = dbapi_connection.cursor()
+        try:
+            cursor.execute("PRAGMA journal_mode=WAL;")
+            cursor.execute("PRAGMA synchronous=NORMAL;")
+            cursor.execute("PRAGMA temp_store=MEMORY;")
+            cursor.execute("PRAGMA foreign_keys=ON;")
+            cursor.execute("PRAGMA busy_timeout=5000;")
+        finally:
+            cursor.close()
 
 # Создание сессии
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)

@@ -61,7 +61,7 @@ def build_vless_link(
     fingerprint: str,
     public_key: str,
     dest: str,
-    flow: str = "none",
+    flow: Optional[str] = None,
 ) -> str:
     """
     Построение VLESS ссылки для клиента
@@ -80,6 +80,7 @@ def build_vless_link(
     Returns:
         VLESS ссылка в формате vless://...
     """
+    flow_val = flow if flow is not None else settings.reality_flow
     # Формирование параметров
     params = {
         "type": "tcp",
@@ -93,8 +94,8 @@ def build_vless_link(
     
     # Добавляем flow только если он указан и не равен "none"
     # Некоторые клиенты (например, v2raytun) не поддерживают flow=none
-    if flow and flow.lower() != "none":
-        params["flow"] = flow
+    if flow_val and flow_val.lower() != "none":
+        params["flow"] = flow_val
 
     # Формирование параметров запроса
     query_params = "&".join([f"{k}={v}" for k, v in params.items()])

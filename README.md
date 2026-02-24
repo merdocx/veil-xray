@@ -14,7 +14,7 @@
 ## 📋 Требования
 
 - Python 3.11+
-- Xray-core (последняя стабильная версия)
+- Xray-core 25.x или 26.x (рекомендуется 26.x). Flow задаётся в `REALITY_FLOW` (по умолчанию `xtls-rprx-vision` для совместимости с 26.x)
 - Linux (Ubuntu/Debian)
 - Домен с настроенным DNS (например, your-domain.com)
 

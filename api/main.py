@@ -10,10 +10,11 @@ import time
 import logging
 import logging.handlers
 import asyncio
+import os
 from datetime import datetime
 from pathlib import Path
 
-from api.database import get_db, Key, TrafficStats, init_db
+from api.database import get_db, Key, TrafficStats, init_db, SessionLocal
 from api.models import (
     KeyCreate,
     KeyResponse,
@@ -30,8 +31,19 @@ from api.utils import generate_uuid, generate_short_id, build_vless_link, parse_
 from config.settings import settings
 
 # Простой in-memory кэш для статистики трафика
-traffic_cache: dict[int, tuple[int, int, int]] = {}  # key_id -> (upload, download, timestamp)
+traffic_cache: dict[int, tuple[int, int, int, int]] = {}  # key_id -> (upload, download, cached_at, updated_at)
 CACHE_TTL = 30  # TTL кэша в секундах
+
+ENABLE_BACKGROUND_TRAFFIC_SYNC = os.getenv("ENABLE_BACKGROUND_TRAFFIC_SYNC", "true").lower() in (
+    "1",
+    "true",
+    "yes",
+    "on",
+)
+BACKGROUND_TRAFFIC_SYNC_INTERVAL_S = int(os.getenv("BACKGROUND_TRAFFIC_SYNC_INTERVAL_S", "600"))
+BACKGROUND_TRAFFIC_SYNC_BATCH_SIZE = int(os.getenv("BACKGROUND_TRAFFIC_SYNC_BATCH_SIZE", "50"))
+_traffic_sync_lock = asyncio.Lock()
+_traffic_sync_cursor = 0
 
 # Настройка логирования
 def setup_logging():
@@ -85,7 +97,7 @@ logger = logging.getLogger(__name__)
 app = FastAPI(
     title="Veil Xray API",
     description="API для управления VLESS+Reality VPN сервером",
-    version="1.3.8",
+    version="1.3.10",
 )
 
 
@@ -205,7 +217,10 @@ app.add_middleware(LoggingMiddleware)
 
 # Добавляем middleware для проверки IP whitelist
 # Разрешаем запросы только с указанного IP адреса
-app.add_middleware(IPWhitelistMiddleware, allowed_ips=["77.246.105.29"])
+app.add_middleware(
+    IPWhitelistMiddleware,
+    allowed_ips=["77.246.105.29", "46.151.31.105", "212.118.52.195", "95.142.47.150"],
+)
 
 # Добавляем middleware для принудительного HTTPS (только если используется reverse proxy)
 # Раскомментируйте следующую строку, если хотите включить принудительное перенаправление на уровне приложения
@@ -306,7 +321,7 @@ async def sync_users_with_xray():
                 if xray_api_available:
                     try:
                         api_success = await xray_client.add_user(
-                            uuid=key.uuid, email=email, flow="none"
+                            uuid=key.uuid, email=email, flow=settings.reality_flow
                         )
 
                         if api_success:
@@ -352,62 +367,80 @@ async def sync_users_with_xray():
 
 async def sync_all_traffic_stats():
     """Фоновая задача для синхронизации статистики всех ключей"""
+    global _traffic_sync_cursor
+
+    if not ENABLE_BACKGROUND_TRAFFIC_SYNC:
+        logger.info("⏸️  Background traffic sync is disabled (ENABLE_BACKGROUND_TRAFFIC_SYNC=false)")
+        return
+
     while True:
         try:
-            await asyncio.sleep(60)  # Обновление каждую минуту
+            await asyncio.sleep(BACKGROUND_TRAFFIC_SYNC_INTERVAL_S)
 
-            # Используем правильный контекстный менеджер для сессии БД
-            db_gen = get_db()
-            db: Session = next(db_gen)
-            try:
-                keys = db.query(Key).filter(Key.is_active == 1).all()
+            if _traffic_sync_lock.locked():
+                continue
 
-                for key in keys:
+            async with _traffic_sync_lock:
+                with SessionLocal() as db:
+                    keys = (
+                        db.query(Key.id, Key.uuid)
+                        .filter(Key.is_active == 1)
+                        .order_by(Key.id.asc())
+                        .all()
+                    )
+
+                if not keys:
+                    continue
+
+                start = _traffic_sync_cursor % len(keys)
+                batch = keys[start : start + BACKGROUND_TRAFFIC_SYNC_BATCH_SIZE]
+                if len(batch) < BACKGROUND_TRAFFIC_SYNC_BATCH_SIZE:
+                    batch += keys[: BACKGROUND_TRAFFIC_SYNC_BATCH_SIZE - len(batch)]
+                _traffic_sync_cursor = (start + len(batch)) % len(keys)
+
+                now = int(time.time())
+                stats_by_key: dict[int, tuple[int, int, int]] = {}
+
+                for key_id, key_uuid in batch:
                     try:
-                        email = f"user_{key.id}_{key.uuid[:8]}"
+                        email = f"user_{key_id}_{key_uuid[:8]}"
                         xray_stats = await xray_client.get_user_stats(email)
-
-                        upload = xray_stats.get("upload", 0)
-                        download = xray_stats.get("download", 0)
-
-                        traffic_stat = (
-                            db.query(TrafficStats)
-                            .filter(TrafficStats.key_id == key.id)
-                            .order_by(TrafficStats.updated_at.desc())
-                            .first()
-                        )
-
-                        if traffic_stat:
-                            if (
-                                traffic_stat.upload != upload
-                                or traffic_stat.download != download
-                            ):
-                                traffic_stat.upload = upload
-                                traffic_stat.download = download
-                                traffic_stat.updated_at = int(time.time())
-                                logger.info(
-                                    f"Auto-updated stats for key {key.id}: upload={upload}, download={download}"
-                                )
-                        else:
-                            traffic_stat = TrafficStats(
-                                key_id=key.id,
-                                upload=upload,
-                                download=download,
-                                updated_at=int(time.time()),
-                            )
-                            db.add(traffic_stat)
-                            logger.info(f"Auto-created stats for key {key.id}")
-
-                        db.commit()
+                        upload = int(xray_stats.get("upload", 0) or 0)
+                        download = int(xray_stats.get("download", 0) or 0)
+                        stats_by_key[int(key_id)] = (upload, download, now)
                     except Exception as e:
-                        logger.error(f"Error syncing stats for key {key.id}: {e}")
-                        db.rollback()
-            finally:
-                # Правильно закрываем генератор сессии
+                        logger.debug(f"Traffic sync skipped for key {key_id}: {e}")
+
+                if not stats_by_key:
+                    continue
+
+                key_ids = list(stats_by_key.keys())
                 try:
-                    next(db_gen, None)
-                except StopIteration:
-                    pass
+                    with SessionLocal() as db:
+                        existing = {
+                            ts.key_id: ts
+                            for ts in db.query(TrafficStats)
+                            .filter(TrafficStats.key_id.in_(key_ids))
+                            .all()
+                        }
+                        for key_id, (upload, download, updated_at) in stats_by_key.items():
+                            ts = existing.get(key_id)
+                            if ts:
+                                ts.upload = upload  # type: ignore
+                                ts.download = download  # type: ignore
+                                ts.updated_at = updated_at  # type: ignore
+                            else:
+                                db.add(
+                                    TrafficStats(
+                                        key_id=key_id,
+                                        upload=upload,
+                                        download=download,
+                                        updated_at=updated_at,
+                                    )
+                                )
+                        db.commit()
+                except Exception as e:
+                    logger.warning(f"Background traffic sync DB update failed: {e}")
 
         except Exception as e:
             logger.error(f"Error in background traffic sync: {e}")
@@ -436,8 +469,11 @@ async def startup_event():
     await sync_users_with_xray()
 
     # Запускаем фоновую задачу для синхронизации статистики
-    asyncio.create_task(sync_all_traffic_stats())
-    logger.info("✅ Background traffic sync task started")
+    if ENABLE_BACKGROUND_TRAFFIC_SYNC:
+        asyncio.create_task(sync_all_traffic_stats())
+        logger.info("✅ Background traffic sync task started")
+    else:
+        logger.info("⏸️  Background traffic sync task is disabled")
 
     logger.info("✅ API server started successfully")
 
@@ -463,6 +499,7 @@ async def root():
 @app.post("/api/keys", response_model=KeyResponse, tags=["Keys"])
 async def create_key(
     key_data: KeyCreate,
+    background_tasks: BackgroundTasks,
     token: str = Depends(verify_token),
     db: Session = Depends(get_db),
 ):
@@ -490,115 +527,41 @@ async def create_key(
         )
 
         db.add(new_key)
+        db.flush()
+        db.add(TrafficStats(key_id=new_key.id, upload=0, download=0, updated_at=timestamp))
         db.commit()
         db.refresh(new_key)
 
-        # Добавление пользователя в Xray через API и конфигурационный файл
-        email = f"user_{new_key.id}_{uuid_value[:8]}"
+        key_id = int(new_key.id)  # type: ignore
+        email = f"user_{key_id}_{uuid_value[:8]}"
 
-        # Пытаемся добавить через Xray API (может не работать, если Xray не запущен)
-        api_success = await xray_client.add_user(uuid_value, email)
-
-        # Добавляем пользователя в конфигурационный файл и ждем выполнения
-        # Это гарантирует, что пользователь будет добавлен в конфигурацию перед финальным коммитом
-        config_success = False
-        try:
-            # Используем execute_task_and_wait для гарантированного выполнения
-            config_success = await config_task_queue.execute_task_and_wait(
-                task_type=TaskType.ADD_USER,
-                uuid=uuid_value,
-                short_id=common_short_id,  # Используем общий short_id
-                email=email,
-                timeout=30.0,  # Таймаут 30 секунд
-            )
-            if config_success:
-                logger.info(
-                    f"✅ User {new_key.id} (UUID: {uuid_value[:8]}...) added to Xray config file"
-                )
-            else:
-                logger.error(
-                    f"❌ Failed to add user {new_key.id} (UUID: {uuid_value[:8]}...) "
-                    f"to Xray config file"
-                )
-                # Откатываем транзакцию, если не удалось добавить в конфигурацию
-                db.rollback()
-                raise HTTPException(
-                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                    detail="Failed to update Xray configuration",
-                )
-        except asyncio.TimeoutError:
-            logger.error(
-                f"❌ Timeout waiting for config update for key {new_key.id} (UUID: {uuid_value[:8]}...). "
-                f"Trying direct fallback..."
-            )
-            # Fallback: прямой вызов если очередь не отвечает
+        async def _provision_user() -> None:
             try:
-                config_success = xray_config_manager.add_user_to_config(
-                    uuid=uuid_value, short_id=common_short_id, email=email
-                )
-                if not config_success:
-                    db.rollback()
-                    raise HTTPException(
-                        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                        detail="Failed to update Xray configuration (timeout and fallback failed)",
+                ok = await xray_client.add_user(uuid_value, email)
+                if not ok:
+                    logger.warning(
+                        f"⚠️  Xray API add_user returned false for key {key_id}. "
+                        f"User may become available after restart/sync."
                     )
             except Exception as e:
-                logger.error(f"❌ Fallback config addition also failed: {e}")
-                db.rollback()
-                raise HTTPException(
-                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                    detail=f"Failed to update Xray configuration: {str(e)}",
-                )
-        except HTTPException:
-            raise
-        except Exception as e:
-            logger.error(
-                f"❌ Error adding user {new_key.id} to config: {e}. Trying direct fallback..."
-            )
-            # Fallback: прямой вызов при ошибке
+                logger.warning(f"⚠️  Xray API add_user failed for key {key_id}: {e}")
+
             try:
-                config_success = xray_config_manager.add_user_to_config(
-                    uuid=uuid_value, short_id=common_short_id, email=email
+                await config_task_queue.add_task(
+                    task_type=TaskType.ADD_USER,
+                    uuid=uuid_value,
+                    short_id=common_short_id,  # Используем общий short_id
+                    email=email,
                 )
-                if not config_success:
-                    db.rollback()
-                    raise HTTPException(
-                        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                        detail="Failed to update Xray configuration (fallback failed)",
-                    )
-            except HTTPException:
-                raise
-            except Exception as fallback_error:
-                logger.error(
-                    f"❌ Fallback config addition also failed: {fallback_error}"
-                )
-                db.rollback()
-                raise HTTPException(
-                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                    detail=f"Failed to update Xray configuration: {str(fallback_error)}",
-                )
+            except Exception as e:
+                logger.warning(f"⚠️  Config queue add_task failed for key {key_id}: {e}")
 
-        if not api_success:
-            logger.warning(
-                f"⚠️  Failed to add user {new_key.id} (UUID: {uuid_value[:8]}...) "
-                f"to Xray via API, but added to config file. "
-                f"User will be available after Xray restart or will be synced automatically."
-            )
-            # Это не критично, пользователь добавлен в конфигурацию
+        background_tasks.add_task(_provision_user)
 
-        # Инициализация статистики трафика
-        traffic_stat = TrafficStats(
-            key_id=new_key.id, upload=0, download=0, updated_at=timestamp
-        )
-        db.add(traffic_stat)
-        db.commit()
-
-        logger.info(
-            f"Key created successfully: {new_key.id}, UUID: {uuid_value[:8]}..."
-        )
+        logger.info(f"Key created successfully: {key_id}, UUID: {uuid_value[:8]}...")
 
         return KeyResponse(
-            key_id=new_key.id,  # type: ignore
+            key_id=key_id,
             uuid=new_key.uuid,  # type: ignore
             short_id=common_short_id,  # Возвращаем общий short_id
             name=new_key.name,  # type: ignore
@@ -778,44 +741,65 @@ async def get_traffic(
             # Используем кэшированные значения
             upload = cached_stats[0]
             download = cached_stats[1]
-            logger.debug(f"Using cached traffic stats for key {key_id}")
+            updated_at = cached_stats[3]
+            return TrafficResponse(
+                key_id=key_id,
+                upload=upload,
+                download=download,
+                total=upload + download,
+                last_updated=updated_at,
+            )
         else:
+            # Освобождаем DB-сессию перед медленными операциями (Xray stats)
+            try:
+                db.close()
+            except Exception:
+                pass
+
             # Получение статистики из Xray
             email = f"user_{key.id}_{key.uuid[:8]}"
             xray_stats = await xray_client.get_user_stats(email)
 
             upload = xray_stats.get("upload", 0)
             download = xray_stats.get("download", 0)
+            updated_at = int(time.time())
             
             # Сохраняем в кэш
-            traffic_cache[key_id] = (upload, download, current_time)
+            traffic_cache[key_id] = (upload, download, current_time, updated_at)
 
-        # Обновление статистики в базе данных
-        traffic_stat = (
-            db.query(TrafficStats).filter(TrafficStats.key_id == key_id).first()
-        )
+            # Обновление статистики в базе данных короткой транзакцией
+            try:
+                with SessionLocal() as db2:
+                    traffic_stat = (
+                        db2.query(TrafficStats)
+                        .filter(TrafficStats.key_id == key_id)
+                        .first()
+                    )
 
-        if traffic_stat:
-            traffic_stat.upload = upload  # type: ignore
-            traffic_stat.download = download  # type: ignore
-            traffic_stat.updated_at = int(time.time())  # type: ignore
-        else:
-            traffic_stat = TrafficStats(
-                key_id=key_id,
-                upload=upload,
-                download=download,
-                updated_at=int(time.time()),
-            )
-            db.add(traffic_stat)
+                    if traffic_stat:
+                        traffic_stat.upload = upload  # type: ignore
+                        traffic_stat.download = download  # type: ignore
+                        traffic_stat.updated_at = updated_at  # type: ignore
+                    else:
+                        db2.add(
+                            TrafficStats(
+                                key_id=key_id,
+                                upload=upload,
+                                download=download,
+                                updated_at=updated_at,
+                            )
+                        )
 
-        db.commit()
+                    db2.commit()
+            except Exception as e:
+                logger.warning(f"Traffic DB update failed for key {key_id}: {e}")
 
         return TrafficResponse(
             key_id=key_id,
             upload=upload,
             download=download,
             total=upload + download,
-            last_updated=traffic_stat.updated_at,  # type: ignore
+            last_updated=updated_at,
         )
 
     except HTTPException:
@@ -900,7 +884,7 @@ async def get_vless_link(
             fingerprint=settings.reality_fingerprint,
             public_key=public_key,  # Используем URL-safe формат
             dest=settings.reality_dest,
-            flow="none",
+            flow=settings.reality_flow,
         )
 
         return VlessLinkResponse(key_id=key.id, vless_link=vless_link)  # type: ignore
@@ -1014,7 +998,7 @@ async def get_key_config(
             fingerprint=settings.reality_fingerprint,
             public_key=public_key,
             dest=settings.reality_dest,
-            flow="none",
+            flow=settings.reality_flow,
         )
 
         return VlessLinkResponse(
@@ -1175,7 +1159,7 @@ async def get_key_config_by_uuid(
             fingerprint=settings.reality_fingerprint,
             public_key=public_key,
             dest=settings.reality_dest,
-            flow="none",
+            flow=settings.reality_flow,
         )
 
         return VlessLinkResponse(
@@ -1304,54 +1288,56 @@ async def sync_all_traffic(
     Ручная синхронизация статистики трафика для всех активных ключей
     """
     try:
-        keys = db.query(Key).filter(Key.is_active == 1).all()
+        keys = db.query(Key.id, Key.uuid).filter(Key.is_active == 1).all()
 
-        updated_count = 0
+        # Освобождаем DB-сессию перед потенциально долгими вызовами к Xray
+        try:
+            db.close()
+        except Exception:
+            pass
+
+        updated_at = int(time.time())
+        stats_by_key: dict[int, tuple[int, int, int]] = {}
         error_count = 0
-        batch_size = 50  # Размер батча для коммитов
 
-        for i, key in enumerate(keys):
+        for key_id, key_uuid in keys:
             try:
-                email = f"user_{key.id}_{key.uuid[:8]}"
+                email = f"user_{key_id}_{key_uuid[:8]}"
                 xray_stats = await xray_client.get_user_stats(email)
-
-                upload = xray_stats.get("upload", 0)
-                download = xray_stats.get("download", 0)
-
-                traffic_stat = (
-                    db.query(TrafficStats)
-                    .filter(TrafficStats.key_id == key.id)
-                    .order_by(TrafficStats.updated_at.desc())
-                    .first()
-                )
-
-                if traffic_stat:
-                    traffic_stat.upload = upload  # type: ignore
-                    traffic_stat.download = download  # type: ignore
-                    traffic_stat.updated_at = int(time.time())  # type: ignore
-                    updated_count += 1
-                else:
-                    traffic_stat = TrafficStats(
-                        key_id=key.id,
-                        upload=upload,
-                        download=download,
-                        updated_at=int(time.time()),
-                    )
-                    db.add(traffic_stat)
-                    updated_count += 1
-
-                # Коммитим батчами для лучшей производительности и надежности
-                if (i + 1) % batch_size == 0:
-                    db.commit()
-                    logger.debug(f"Committed batch of {batch_size} keys")
-
+                upload = int(xray_stats.get("upload", 0) or 0)
+                download = int(xray_stats.get("download", 0) or 0)
+                stats_by_key[int(key_id)] = (upload, download, updated_at)
             except Exception as e:
                 error_count += 1
-                logger.error(f"Error syncing stats for key {key.id}: {e}")
-                db.rollback()  # Откатываем только текущий ключ
+                logger.debug(f"Traffic sync skipped for key {key_id}: {e}")
 
-        # Финальный коммит для оставшихся записей
-        db.commit()
+        updated_count = 0
+        if stats_by_key:
+            key_ids = list(stats_by_key.keys())
+            with SessionLocal() as db2:
+                existing = {
+                    ts.key_id: ts
+                    for ts in db2.query(TrafficStats)
+                    .filter(TrafficStats.key_id.in_(key_ids))
+                    .all()
+                }
+                for key_id, (upload, download, ts_updated_at) in stats_by_key.items():
+                    ts = existing.get(key_id)
+                    if ts:
+                        ts.upload = upload  # type: ignore
+                        ts.download = download  # type: ignore
+                        ts.updated_at = ts_updated_at  # type: ignore
+                    else:
+                        db2.add(
+                            TrafficStats(
+                                key_id=key_id,
+                                upload=upload,
+                                download=download,
+                                updated_at=ts_updated_at,
+                            )
+                        )
+                    updated_count += 1
+                db2.commit()
 
         return {
             "success": True,
@@ -1430,6 +1416,12 @@ async def reset_traffic(
 
         # Очищаем кэш статистики для этого ключа
         traffic_cache.pop(key_id, None)
+
+        # Освобождаем DB-сессию перед вызовом Xray (subprocess в thread)
+        try:
+            db.close()
+        except Exception:
+            pass
 
         # Обнуляем статистику в Xray через statsquery -reset=true (только счётчики этого пользователя)
         email = f"user_{key.id}_{key.uuid[:8]}"
