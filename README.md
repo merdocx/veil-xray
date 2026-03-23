@@ -23,8 +23,8 @@
 ### 1. Клонирование репозитория
 
 ```bash
-git clone https://github.com/merdocx/veil-xray.git
-cd veil-xray
+git clone https://github.com/merdocx/veil-v2ray.git
+cd veil-v2ray
 ```
 
 ### 2. Установка зависимостей
@@ -61,8 +61,6 @@ python scripts/init_reality_keys.py
 ### 4. Настройка конфигурации
 
 Создайте файл `.env` с настройками:
-<｜tool▁calls▁begin｜><｜tool▁call▁begin｜>
-read_file
 
 ```env
 API_SECRET_KEY=your-secret-key-here
