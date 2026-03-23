@@ -18,6 +18,31 @@
 - Linux (Ubuntu/Debian)
 - Домен с настроенным DNS (например, your-domain.com)
 
+## 🧱 Подготовка чистой Ubuntu
+
+Перед установкой проекта на "голую" Ubuntu выполните:
+
+```bash
+sudo apt-get update
+sudo apt-get install -y \
+  git curl ca-certificates \
+  python3 python3-pip python3-venv \
+  nginx certbot python3-certbot-nginx \
+  dnsutils
+```
+
+Настройка firewall (если используете UFW):
+
+```bash
+sudo ufw allow OpenSSH
+sudo ufw allow 80/tcp
+sudo ufw allow 443/tcp
+# если API будет на 8443 (когда 443 занят Xray), откройте и этот порт:
+# sudo ufw allow 8443/tcp
+sudo ufw enable
+sudo ufw status
+```
+
 ## 🛠 Установка
 
 ### 1. Клонирование репозитория
@@ -93,8 +118,17 @@ XRAY_API_PORT=10085
 5. Запустите Xray:
 
 ```bash
+sudo systemctl daemon-reload
 systemctl start xray
 systemctl enable xray
+systemctl status xray --no-pager
+```
+
+Проверьте бинарник и валидность конфига:
+
+```bash
+/usr/local/bin/xray version
+/usr/local/bin/xray -test -config /usr/local/etc/xray/config.json
 ```
 
 ### 6. Инициализация базы данных
@@ -201,6 +235,11 @@ curl https://api.your-domain.com/
 #### Ручная настройка (альтернатива)
 
 Подробные инструкции по ручной настройке HTTPS см. в [HTTPS_SETUP.md](HTTPS_SETUP.md).
+
+#### Сценарий, если `443` уже занят Xray
+
+Если `443/tcp` занят Xray для VLESS+Reality, размещайте API на отдельном HTTPS порту (например, `8443`) через Nginx.
+Для такого варианта ориентируйтесь на runbook: `/.cursor/plans/ubuntu_rsync_no-git_ef1cf90a.plan.md` (блок `Nginx + HTTPS для API на 8443`).
 
 **Проверка настройки:**
 - API доступен по HTTPS: `https://api.your-domain.com`
@@ -440,6 +479,26 @@ pytest tests/ -v --cov=api --cov-report=html
 ## 📊 Мониторинг трафика
 
 Статистика трафика обновляется автоматически при запросе через API. Данные хранятся в SQLite базе данных и синхронизируются с Xray Stats API.
+
+## ✅ Smoke checks после деплоя
+
+После установки на чистый сервер проверьте минимальный набор:
+
+```bash
+# Xray
+/usr/local/bin/xray version
+/usr/local/bin/xray -test -config /usr/local/etc/xray/config.json
+sudo systemctl status xray --no-pager
+
+# API
+sudo systemctl status veil-xray-api --no-pager
+curl -sS http://127.0.0.1:8000/
+
+# HTTPS API
+curl -sS https://api.your-domain.com/
+# или, если используете альтернативный порт:
+# curl -sS https://api.your-domain.com:8443/
+```
 
 ## 🏗 Структура проекта
 
