@@ -29,19 +29,20 @@ from api.xray_config import XrayConfigManager
 from api.task_queue import config_task_queue, TaskType
 from api.utils import generate_uuid, generate_short_id, build_vless_link, parse_key_identifier
 from config.settings import settings
+from sqlalchemy.exc import TimeoutError as SATimeoutError
 
 # Простой in-memory кэш для статистики трафика
 traffic_cache: dict[int, tuple[int, int, int, int]] = {}  # key_id -> (upload, download, cached_at, updated_at)
 CACHE_TTL = 30  # TTL кэша в секундах
 
-ENABLE_BACKGROUND_TRAFFIC_SYNC = os.getenv("ENABLE_BACKGROUND_TRAFFIC_SYNC", "true").lower() in (
+ENABLE_BACKGROUND_TRAFFIC_SYNC = os.getenv("ENABLE_BACKGROUND_TRAFFIC_SYNC", "false").lower() in (
     "1",
     "true",
     "yes",
     "on",
 )
-BACKGROUND_TRAFFIC_SYNC_INTERVAL_S = int(os.getenv("BACKGROUND_TRAFFIC_SYNC_INTERVAL_S", "600"))
-BACKGROUND_TRAFFIC_SYNC_BATCH_SIZE = int(os.getenv("BACKGROUND_TRAFFIC_SYNC_BATCH_SIZE", "50"))
+BACKGROUND_TRAFFIC_SYNC_INTERVAL_S = int(os.getenv("BACKGROUND_TRAFFIC_SYNC_INTERVAL_S", "900"))
+BACKGROUND_TRAFFIC_SYNC_BATCH_SIZE = int(os.getenv("BACKGROUND_TRAFFIC_SYNC_BATCH_SIZE", "20"))
 _traffic_sync_lock = asyncio.Lock()
 _traffic_sync_cursor = 0
 
@@ -219,7 +220,7 @@ app.add_middleware(LoggingMiddleware)
 # Разрешаем запросы только с указанного IP адреса
 app.add_middleware(
     IPWhitelistMiddleware,
-    allowed_ips=["77.246.105.29", "46.151.31.105", "212.118.52.195", "95.142.47.150"],
+    allowed_ips=["77.246.105.29", "46.151.31.105", "212.118.52.195", "95.142.47.150", "89.110.76.53"],
 )
 
 # Добавляем middleware для принудительного HTTPS (только если используется reverse proxy)
@@ -451,6 +452,13 @@ async def startup_event():
     """Инициализация при запуске"""
     logger.info("🚀 Starting Veil Xray API server...")
 
+    # Логируем используемую БД и тип подключения для диагностики блокировок
+    db_url = settings.database_url
+    if "sqlite" in db_url:
+        logger.info(f"🗄 Using SQLite database at '{db_url}' with NullPool and WAL mode (see api.database).")
+    else:
+        logger.info(f"🗄 Using database URL '{db_url}'")
+
     # Инициализация базы данных
     logger.info("📦 Initializing database...")
     init_db()
@@ -572,8 +580,15 @@ async def create_key(
     except HTTPException:
         raise
     except Exception as e:
-        db.rollback()
-        logger.error(f"Error creating key: {e}")
+        try:
+            db.rollback()
+        except Exception:
+            pass
+
+        if isinstance(e, SATimeoutError):
+            logger.error(f"[DB_POOL_TIMEOUT] Error creating key due to DB pool timeout: {e}")
+        else:
+            logger.error(f"Error creating key: {e}")
         
         # Проверяем, является ли ошибка IntegrityError (дублирование UUID)
         from sqlalchemy.exc import IntegrityError
@@ -622,10 +637,17 @@ async def delete_key(
                 detail=f"Key not found",
             )
 
-        key_id = key.id  # type: ignore
+        # Сохраняем необходимые поля и закрываем исходную сессию перед долгими операциями
+        key_id = int(key.id)  # type: ignore
+        key_uuid = str(key.uuid)  # type: ignore
+
+        try:
+            db.close()
+        except Exception:
+            pass
 
         # Удаление пользователя из Xray через API и конфигурационный файл
-        email = f"user_{key.id}_{key.uuid[:8]}"
+        email = f"user_{key_id}_{key_uuid[:8]}"
 
         # Пытаемся удалить через Xray API
         await xray_client.remove_user(email)
@@ -640,30 +662,30 @@ async def delete_key(
             # Используем execute_task_and_wait для гарантированного выполнения
             config_success = await config_task_queue.execute_task_and_wait(
                 task_type=TaskType.REMOVE_USER,
-                uuid=key.uuid,  # type: ignore
+                uuid=key_uuid,
                 short_id=common_short_id,  # Используем общий short_id
                 email=email,
                 timeout=30.0,  # Таймаут 30 секунд
             )
             if config_success:
                 logger.info(
-                    f"✅ User {key_id} (UUID: {key.uuid[:8]}...) removed from Xray config file"
+                    f"✅ User {key_id} (UUID: {key_uuid[:8]}...) removed from Xray config file"
                 )
             else:
                 logger.warning(
-                    f"⚠️  Failed to remove user {key_id} (UUID: {key.uuid[:8]}...) "
+                    f"⚠️  Failed to remove user {key_id} (UUID: {key_uuid[:8]}...) "
                     f"from Xray config file"
                 )
         except asyncio.TimeoutError:
             logger.error(
-                f"❌ Timeout waiting for config update for key {key_id} (UUID: {key.uuid[:8]}...). "
+                f"❌ Timeout waiting for config update for key {key_id} (UUID: {key_uuid[:8]}...). "
                 f"Trying direct fallback..."
             )
             # Fallback: прямой вызов если очередь не отвечает
             try:
                 common_short_id = settings.reality_common_short_id
                 config_success = xray_config_manager.remove_user_from_config(
-                    uuid=key.uuid, short_id=common_short_id  # type: ignore
+                    uuid=key_uuid, short_id=common_short_id
                 )
             except Exception as e:
                 logger.error(f"❌ Fallback config removal also failed: {e}")
@@ -676,7 +698,7 @@ async def delete_key(
             try:
                 common_short_id = settings.reality_common_short_id
                 config_success = xray_config_manager.remove_user_from_config(
-                    uuid=key.uuid, short_id=common_short_id  # type: ignore
+                    uuid=key_uuid, short_id=common_short_id
                 )
             except Exception as fallback_error:
                 logger.error(f"❌ Fallback config removal also failed: {fallback_error}")
@@ -691,9 +713,23 @@ async def delete_key(
             )
 
         # Удаление из базы данных (каскадное удаление статистики)
-        # Теперь это происходит ПОСЛЕ попытки удаления из конфигурации
-        db.delete(key)
-        db.commit()
+        # Выполняем отдельной короткой транзакцией в новом соединении
+        try:
+            with SessionLocal() as db2:
+                key_obj = db2.query(Key).filter(Key.id == key_id).first()
+                if key_obj:
+                    db2.delete(key_obj)
+                    db2.commit()
+                else:
+                    logger.warning(
+                        f"⚠️  Key {key_id} not found in DB during delete after Xray/config cleanup."
+                    )
+        except Exception as db_error:
+            logger.error(f"❌ Database delete failed for key {key_id}: {db_error}")
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Failed to delete key in database: {db_error}",
+            )
 
         logger.info(f"Key deleted successfully: {key_id}")
 
@@ -704,8 +740,14 @@ async def delete_key(
     except HTTPException:
         raise
     except Exception as e:
-        db.rollback()
-        logger.error(f"Error deleting key: {e}")
+        try:
+            db.rollback()
+        except Exception:
+            pass
+        if isinstance(e, SATimeoutError):
+            logger.error(f"[DB_POOL_TIMEOUT] Error deleting key due to DB pool timeout: {e}")
+        else:
+            logger.error(f"Error deleting key: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to delete key: {str(e)}",
@@ -805,7 +847,10 @@ async def get_traffic(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Error getting traffic: {e}")
+        if isinstance(e, SATimeoutError):
+            logger.error(f"[DB_POOL_TIMEOUT] Error getting traffic due to DB pool timeout: {e}")
+        else:
+            logger.error(f"Error getting traffic: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to get traffic: {str(e)}",
@@ -892,9 +937,14 @@ async def get_vless_link(
     except HTTPException:
         raise
     except Exception as e:
-        logger.exception(
-            f"Error generating VLESS link for identifier '{identifier}': {type(e).__name__}: {e}"
-        )
+        if isinstance(e, SATimeoutError):
+            logger.error(
+                f"[DB_POOL_TIMEOUT] Error generating VLESS link for identifier '{identifier}' due to DB pool timeout: {e}"
+            )
+        else:
+            logger.exception(
+                f"Error generating VLESS link for identifier '{identifier}': {type(e).__name__}: {e}"
+            )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to generate VLESS link: {str(e)}",
@@ -927,7 +977,10 @@ async def list_keys(token: str = Depends(verify_token), db: Session = Depends(ge
         return KeyListResponse(keys=key_responses, total=len(key_responses))
 
     except Exception as e:
-        logger.error(f"Error listing keys: {e}")
+        if isinstance(e, SATimeoutError):
+            logger.error(f"[DB_POOL_TIMEOUT] Error listing keys due to DB pool timeout: {e}")
+        else:
+            logger.error(f"Error listing keys: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to list keys: {str(e)}",
@@ -1009,9 +1062,14 @@ async def get_key_config(
     except HTTPException:
         raise
     except Exception as e:
-        logger.exception(
-            f"Error getting key config for identifier '{identifier}': {type(e).__name__}: {e}"
-        )
+        if isinstance(e, SATimeoutError):
+            logger.error(
+                f"[DB_POOL_TIMEOUT] Error getting key config for identifier '{identifier}' due to DB pool timeout: {e}"
+            )
+        else:
+            logger.exception(
+                f"Error getting key config for identifier '{identifier}': {type(e).__name__}: {e}"
+            )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to get key config: {str(e)}",
@@ -1062,7 +1120,10 @@ async def get_key(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Error getting key: {e}")
+        if isinstance(e, SATimeoutError):
+            logger.error(f"[DB_POOL_TIMEOUT] Error getting key due to DB pool timeout: {e}")
+        else:
+            logger.error(f"Error getting key: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to get key: {str(e)}",
@@ -1100,7 +1161,14 @@ async def get_key_by_uuid(
     except HTTPException:
         raise
     except Exception as e:
-        logger.exception(f"Error getting key by UUID '{uuid}': {type(e).__name__}: {e}")
+        if isinstance(e, SATimeoutError):
+            logger.error(
+                f"[DB_POOL_TIMEOUT] Error getting key by UUID '{uuid}' due to DB pool timeout: {e}"
+            )
+        else:
+            logger.exception(
+                f"Error getting key by UUID '{uuid}': {type(e).__name__}: {e}"
+            )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to get key: {str(e)}",
@@ -1170,9 +1238,14 @@ async def get_key_config_by_uuid(
     except HTTPException:
         raise
     except Exception as e:
-        logger.exception(
-            f"Error getting key config by UUID '{uuid}': {type(e).__name__}: {e}"
-        )
+        if isinstance(e, SATimeoutError):
+            logger.error(
+                f"[DB_POOL_TIMEOUT] Error getting key config by UUID '{uuid}' due to DB pool timeout: {e}"
+            )
+        else:
+            logger.exception(
+                f"Error getting key config by UUID '{uuid}': {type(e).__name__}: {e}"
+            )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to get key config: {str(e)}",
@@ -1196,10 +1269,17 @@ async def delete_key_by_uuid(
                 detail=f"Key with uuid {uuid} not found",
             )
 
-        key_id = key.id  # type: ignore
+        key_id = int(key.id)  # type: ignore
+        key_uuid = str(key.uuid)  # type: ignore
+
+        # Закрываем сессию перед долгими сетевыми операциями
+        try:
+            db.close()
+        except Exception:
+            pass
 
         # Удаление пользователя из Xray через API и конфигурационный файл
-        email = f"user_{key.id}_{key.uuid[:8]}"
+        email = f"user_{key_id}_{key_uuid[:8]}"
 
         # Пытаемся удалить через Xray API
         await xray_client.remove_user(email)
@@ -1211,29 +1291,29 @@ async def delete_key_by_uuid(
 
             config_success = await config_task_queue.execute_task_and_wait(
                 task_type=TaskType.REMOVE_USER,
-                uuid=key.uuid,  # type: ignore
+                uuid=key_uuid,
                 short_id=common_short_id,
                 email=email,
                 timeout=30.0,
             )
             if config_success:
                 logger.info(
-                    f"✅ User {key_id} (UUID: {key.uuid[:8]}...) removed from Xray config file"
+                    f"✅ User {key_id} (UUID: {key_uuid[:8]}...) removed from Xray config file"
                 )
             else:
                 logger.warning(
-                    f"⚠️  Failed to remove user {key_id} (UUID: {key.uuid[:8]}...) "
+                    f"⚠️  Failed to remove user {key_id} (UUID: {key_uuid[:8]}...) "
                     f"from Xray config file"
                 )
         except asyncio.TimeoutError:
             logger.error(
-                f"❌ Timeout waiting for config update for key {key_id} (UUID: {key.uuid[:8]}...). "
+                f"❌ Timeout waiting for config update for key {key_id} (UUID: {key_uuid[:8]}...). "
                 f"Trying direct fallback..."
             )
             try:
                 common_short_id = settings.reality_common_short_id
                 config_success = xray_config_manager.remove_user_from_config(
-                    uuid=key.uuid, short_id=common_short_id  # type: ignore
+                    uuid=key_uuid, short_id=common_short_id
                 )
             except Exception as e:
                 logger.error(f"❌ Fallback config removal also failed: {e}")
@@ -1245,7 +1325,7 @@ async def delete_key_by_uuid(
             try:
                 common_short_id = settings.reality_common_short_id
                 config_success = xray_config_manager.remove_user_from_config(
-                    uuid=key.uuid, short_id=common_short_id  # type: ignore
+                    uuid=key_uuid, short_id=common_short_id
                 )
             except Exception as fallback_error:
                 logger.error(f"❌ Fallback config removal also failed: {fallback_error}")
@@ -1256,10 +1336,23 @@ async def delete_key_by_uuid(
                 f"⚠️  Key {key_id} will be removed from database, but user may still exist in Xray config file. "
                 f"Manual cleanup may be required."
             )
-
-        # Удаление из базы данных
-        db.delete(key)
-        db.commit()
+        # Удаление из базы данных в отдельной короткой транзакции
+        try:
+            with SessionLocal() as db2:
+                key_obj = db2.query(Key).filter(Key.id == key_id).first()
+                if key_obj:
+                    db2.delete(key_obj)
+                    db2.commit()
+                else:
+                    logger.warning(
+                        f"⚠️  Key {key_id} not found in DB during delete_by_uuid after Xray/config cleanup."
+                    )
+        except Exception as db_error:
+            logger.error(f"❌ Database delete failed for key {key_id} (by UUID): {db_error}")
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Failed to delete key in database: {db_error}",
+            )
 
         logger.info(f"Key deleted successfully: {key_id}")
 
@@ -1417,6 +1510,8 @@ async def reset_traffic(
         # Очищаем кэш статистики для этого ключа
         traffic_cache.pop(key_id, None)
 
+        key_uuid = str(key.uuid)  # type: ignore
+
         # Освобождаем DB-сессию перед вызовом Xray (subprocess в thread)
         try:
             db.close()
@@ -1424,7 +1519,7 @@ async def reset_traffic(
             pass
 
         # Обнуляем статистику в Xray через statsquery -reset=true (только счётчики этого пользователя)
-        email = f"user_{key.id}_{key.uuid[:8]}"
+        email = f"user_{key_id}_{key_uuid[:8]}"
         try:
             reset_ok = await xray_client.reset_user_stats(email)
             if not reset_ok:
@@ -1455,7 +1550,10 @@ async def reset_traffic(
     except HTTPException:
         raise
     except Exception as e:
-        db.rollback()
+        try:
+            db.rollback()
+        except Exception:
+            pass
         logger.error(f"Error resetting traffic: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
