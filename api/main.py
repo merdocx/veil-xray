@@ -28,7 +28,7 @@ from api.xray_client import XrayClient
 from api.xray_config import XrayConfigManager
 from api.task_queue import config_task_queue, TaskType
 from api.utils import generate_uuid, generate_short_id, build_vless_link, parse_key_identifier
-from config.settings import settings
+from config.settings import settings, get_allowed_ips, get_cors_origins
 from sqlalchemy.exc import TimeoutError as SATimeoutError
 
 # Простой in-memory кэш для статистики трафика
@@ -155,14 +155,23 @@ class LoggingMiddleware(BaseHTTPMiddleware):
 class IPWhitelistMiddleware(BaseHTTPMiddleware):
     """Middleware для проверки IP whitelist - разрешает запросы только с разрешенных IP"""
 
-    def __init__(self, app, allowed_ips: list[str]):
+    def __init__(self, app):
         super().__init__(app)
-        self.allowed_ips = set(allowed_ips)
 
     async def dispatch(self, request: Request, call_next):
-        # Разрешаем запросы к корневому эндпоинту и документации без проверки IP
-        if request.url.path in ["/", "/docs", "/openapi.json", "/redoc"]:
+        # Публичный health-check без авторизации и без whitelist
+        if request.url.path == "/":
             return await call_next(request)
+
+        allowed_ips = set(get_allowed_ips())
+        if not allowed_ips:
+            logger.warning(
+                f"⚠️  Access denied: API_ALLOWED_IPS is empty for {request.url.path}"
+            )
+            return JSONResponse(
+                status_code=status.HTTP_403_FORBIDDEN,
+                content={"detail": "Access denied. API IP whitelist is not configured."},
+            )
 
         # Получаем реальный IP клиента
         # Проверяем заголовки, которые устанавливает reverse proxy
@@ -182,7 +191,7 @@ class IPWhitelistMiddleware(BaseHTTPMiddleware):
                 content={"detail": "Access denied. Your IP address is not authorized."},
             )
 
-        if client_ip in self.allowed_ips:
+        if client_ip in allowed_ips:
             return await call_next(request)
         else:
             logger.warning(
@@ -216,25 +225,23 @@ class ForceHTTPSMiddleware(BaseHTTPMiddleware):
 # Добавляем middleware для логирования запросов и ошибок
 app.add_middleware(LoggingMiddleware)
 
-# Добавляем middleware для проверки IP whitelist
-# Разрешаем запросы только с указанного IP адреса
-app.add_middleware(
-    IPWhitelistMiddleware,
-    allowed_ips=["77.246.105.29", "46.151.31.105", "212.118.52.195", "95.142.47.150", "89.110.76.53"],
-)
+# IP whitelist из API_ALLOWED_IPS (.env)
+app.add_middleware(IPWhitelistMiddleware)
 
 # Добавляем middleware для принудительного HTTPS (только если используется reverse proxy)
 # Раскомментируйте следующую строку, если хотите включить принудительное перенаправление на уровне приложения
 # app.add_middleware(ForceHTTPSMiddleware)
 
-# CORS middleware
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+# CORS только при явном CORS_ORIGINS (не используйте * с credentials)
+_cors_origins = get_cors_origins()
+if _cors_origins:
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=_cors_origins,
+        allow_credentials=settings.cors_allow_credentials,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
 
 # Security
 security = HTTPBearer()

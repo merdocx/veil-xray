@@ -77,3 +77,10 @@ htmlcov/
 # Bash history
 .bash_history
 
+# Server / shell artifacts (must not be in repo)
+.ssh/
+.viminfo
+.bashrc
+.profile
+.cache/
+

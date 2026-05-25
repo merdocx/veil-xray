@@ -19,6 +19,18 @@ from config.settings import settings
 
 
 @pytest.fixture(scope="function", autouse=True)
+def test_security_settings(monkeypatch):
+    """IP whitelist и CORS для TestClient (host testclient)."""
+    monkeypatch.setattr(
+        settings,
+        "api_allowed_ips",
+        "127.0.0.1,testclient",
+    )
+    monkeypatch.setattr(settings, "cors_origins", "")
+    monkeypatch.setattr(settings, "cors_allow_credentials", False)
+
+
+@pytest.fixture(scope="function", autouse=True)
 def test_db(monkeypatch):
     """Создание тестовой базы данных (автоматически для всех тестов)"""
     # Создание временной базы данных в файле (in-memory имеет проблемы с соединениями)
