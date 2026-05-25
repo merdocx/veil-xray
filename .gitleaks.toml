@@ -3,12 +3,30 @@ title = "veil-xray gitleaks"
 [extend]
 useDefault = true
 
-[[rules.allowlists]]
-description = "CI and documentation placeholders"
+[allowlist]
+description = "Ignored paths and placeholder secrets"
+paths = [
+  '''(?:^|/)\.cursor-server/''',
+  '''(?:^|/)\.cursor/''',
+  '''(?:^|/)\.venv/''',
+  '''(?:^|/)venv/''',
+  '''(?:^|/)htmlcov/''',
+  '''(?:^|/)\.mypy_cache/''',
+  '''(?:^|/)\.pytest_cache/''',
+  '''(?:^|/)logs/''',
+  '''(?:^|/)backups/''',
+  '''(?:^|/)database/''',
+  '''(?:^|/)\.coverage''',
+  '''(?:^|/)\.cache/''',
+  '''(?:^|/)\.ssh/''',
+  '''(?:^|/)\.env$''',
+  '''(?:^|/)xray/config\.json$''',
+]
 regexes = [
   '''test-secret-key-for-ci''',
   '''change-me-in-production''',
   '''YOUR_API_SECRET_KEY''',
+  '''YOUR_SECRET_KEY''',
   '''your-secret-key-here''',
   '''YOUR_PRIVATE_KEY_HERE''',
 ]
