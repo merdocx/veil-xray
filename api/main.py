@@ -46,6 +46,35 @@ BACKGROUND_TRAFFIC_SYNC_BATCH_SIZE = int(os.getenv("BACKGROUND_TRAFFIC_SYNC_BATC
 _traffic_sync_lock = asyncio.Lock()
 _traffic_sync_cursor = 0
 
+# Типовые пути сканеров — не засоряют WARNING в логах
+_SCANNER_PROBE_EXACT = frozenset({
+    "/",
+    "/favicon.ico",
+    "/robots.txt",
+    "/sitemap.xml",
+    "/metrics",
+    "/.env",
+    "/health",
+})
+_SCANNER_PROBE_SUBSTRINGS = (
+    ".env",
+    ".git",
+    "wp-",
+    "phpmyadmin",
+    "/admin",
+    "/.well-known",
+    "/actuator",
+)
+
+
+def _is_scanner_probe(path: str) -> bool:
+    """Запросы ботов/сканеров — логируем на DEBUG."""
+    if path in _SCANNER_PROBE_EXACT:
+        return True
+    lower = path.lower()
+    return any(marker in lower for marker in _SCANNER_PROBE_SUBSTRINGS)
+
+
 # Настройка логирования
 def setup_logging():
     """Настройка логирования с файловым выводом и ротацией"""
@@ -118,13 +147,16 @@ class LoggingMiddleware(BaseHTTPMiddleware):
             process_time = time.time() - start_time
             status_code = response.status_code
 
-            # Логируем ошибки с более подробной информацией
             if status_code >= 400:
-                logger.warning(
+                log_msg = (
                     f"⚠️  {request_method} {full_path} - "
                     f"Status: {status_code} - "
                     f"Time: {process_time:.3f}s"
                 )
+                if status_code == 403 and _is_scanner_probe(request_path):
+                    logger.debug(log_msg)
+                else:
+                    logger.warning(log_msg)
             else:
                 logger.info(
                     f"{request_method} {full_path} - "
@@ -194,9 +226,13 @@ class IPWhitelistMiddleware(BaseHTTPMiddleware):
         if client_ip in allowed_ips:
             return await call_next(request)
         else:
-            logger.warning(
+            deny_msg = (
                 f"⚠️  Access denied for IP {client_ip} to {request.url.path}"
             )
+            if _is_scanner_probe(request.url.path):
+                logger.debug(deny_msg)
+            else:
+                logger.warning(deny_msg)
             return JSONResponse(
                 status_code=status.HTTP_403_FORBIDDEN,
                 content={"detail": "Access denied. Your IP address is not authorized."},
