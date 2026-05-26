@@ -21,8 +21,8 @@ fi
 
 # Попытка получить домен из настроек
 DEFAULT_DOMAIN=""
-if [ -f "/root/config/settings.py" ]; then
-    DEFAULT_DOMAIN=$(grep -E "domain.*=" /root/config/settings.py | head -1 | sed -E "s/.*['\"]([^'\"]+)['\"].*/\1/" | head -1)
+if [ -f "/root/veil-v2ray/config/settings.py" ]; then
+    DEFAULT_DOMAIN=$(grep -E "domain.*=" /root/veil-v2ray/config/settings.py | head -1 | sed -E "s/.*['\"]([^'\"]+)['\"].*/\1/" | head -1)
     if [ "$DEFAULT_DOMAIN" = "veil-bear.ru" ]; then
         DEFAULT_DOMAIN=""  # Игнорируем значение по умолчанию
     fi
