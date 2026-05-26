@@ -14,7 +14,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import RedirectResponse, JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware
 from sqlalchemy.orm import Session
-from typing import List
+from typing import Any, List, Optional
 import time
 import logging
 import logging.handlers
@@ -36,6 +36,8 @@ from api.models import (
     VlessLinkResponse,
     KeyListResponse,
     TrafficResetResponse,
+    XraySyncStartResponse,
+    XraySyncStatusResponse,
 )
 from api.xray_client import XrayClient
 from api.xray_config import XrayConfigManager
@@ -57,6 +59,82 @@ BACKGROUND_TRAFFIC_SYNC_INTERVAL_S = settings.background_traffic_sync_interval_s
 BACKGROUND_TRAFFIC_SYNC_BATCH_SIZE = settings.background_traffic_sync_batch_size
 _traffic_sync_lock = asyncio.Lock()
 _traffic_sync_cursor = 0
+
+# Фоновая синхронизация пользователей БД → Xray (startup / sync-config)
+_user_sync_task: Optional[asyncio.Task] = None
+_user_sync_state: dict[str, Any] = {"status": "idle"}
+
+
+def _sync_iso_now() -> str:
+    return datetime.now().astimezone().isoformat(timespec="seconds")
+
+
+def get_user_sync_status() -> dict[str, Any]:
+    """Снимок состояния синхронизации (для API)."""
+    return dict(_user_sync_state)
+
+
+def schedule_user_sync(trigger: str) -> str:
+    """
+    Запускает sync в фоне. Возвращает 'started' или 'already_running'.
+    Вызывать только из running event loop.
+    """
+    global _user_sync_task
+    if _user_sync_task is not None and not _user_sync_task.done():
+        return "already_running"
+    _user_sync_state.update(
+        {
+            "status": "running",
+            "trigger": trigger,
+            "started_at": _sync_iso_now(),
+            "finished_at": None,
+            "synced_via_api": None,
+            "synced_via_config": None,
+            "skipped": None,
+            "errors": None,
+            "total_keys": None,
+            "error_message": None,
+        }
+    )
+    _user_sync_task = asyncio.create_task(_run_user_sync_job(trigger))
+    return "started"
+
+
+async def _run_user_sync_job(trigger: str) -> None:
+    try:
+        result = await sync_users_with_xray()
+        _user_sync_state.update(
+            {
+                "status": "completed",
+                "trigger": trigger,
+                "finished_at": _sync_iso_now(),
+                "synced_via_api": result.get("synced_api_count", 0),
+                "synced_via_config": result.get("synced_config_count", 0),
+                "skipped": result.get("skipped_count", 0),
+                "errors": result.get("error_count", 0),
+                "total_keys": result.get("total_keys", 0),
+                "error_message": None,
+            }
+        )
+    except asyncio.CancelledError:
+        _user_sync_state.update(
+            {
+                "status": "idle",
+                "finished_at": _sync_iso_now(),
+                "error_message": "cancelled",
+            }
+        )
+        raise
+    except Exception as e:
+        logger.error(f"❌ Background user sync failed ({trigger}): {e}")
+        _user_sync_state.update(
+            {
+                "status": "failed",
+                "trigger": trigger,
+                "finished_at": _sync_iso_now(),
+                "error_message": str(e),
+            }
+        )
 
 # Публичные пути без IP whitelist (health для мониторинга)
 _PUBLIC_PATHS = frozenset({"/", "/health"})
@@ -323,15 +401,22 @@ def verify_token(credentials: HTTPAuthorizationCredentials = Depends(security)):
     return token
 
 
-async def sync_users_with_xray():
+async def sync_users_with_xray() -> dict[str, int]:
     """
-    Синхронизация пользователей из БД с Xray API при старте приложения
+    Синхронизация пользователей из БД с Xray API.
 
     Добавляет в Xray всех активных пользователей, которые есть в БД,
     но отсутствуют в Xray (например, если Xray был перезапущен или API был недоступен).
     Также обновляет конфигурационный файл для обеспечения консистентности.
     """
     logger.info("🔄 Starting synchronization of users with Xray API...")
+    empty = {
+        "synced_api_count": 0,
+        "synced_config_count": 0,
+        "skipped_count": 0,
+        "error_count": 0,
+        "total_keys": 0,
+    }
 
     db: Session = next(get_db())
     try:
@@ -340,7 +425,7 @@ async def sync_users_with_xray():
 
         if not keys:
             logger.info("No active keys found in database. Nothing to sync.")
-            return
+            return empty
 
         logger.info(
             f"Found {len(keys)} active key(s) in database. Syncing with Xray..."
@@ -428,9 +513,17 @@ async def sync_users_with_xray():
             f"{synced_api_count} synced via API, {synced_config_count} synced via config, "
             f"{skipped_count} skipped, {error_count} errors"
         )
+        return {
+            "synced_api_count": synced_api_count,
+            "synced_config_count": synced_config_count,
+            "skipped_count": skipped_count,
+            "error_count": error_count,
+            "total_keys": len(keys),
+        }
 
     except Exception as e:
         logger.error(f"❌ Error during user synchronization: {e}")
+        raise
     finally:
         db.close()
 
@@ -537,7 +630,8 @@ async def _app_startup() -> None:
     xray_config_manager.ensure_common_short_id(common_short_id)
     logger.info(f"✅ Common short_id '{common_short_id}' ensured in Xray config")
 
-    await sync_users_with_xray()
+    schedule_user_sync("startup")
+    logger.info("✅ User sync scheduled in background (startup)")
 
     if ENABLE_BACKGROUND_TRAFFIC_SYNC:
         asyncio.create_task(sync_all_traffic_stats())
@@ -550,7 +644,14 @@ async def _app_startup() -> None:
 
 async def _app_shutdown() -> None:
     """Остановка при завершении работы."""
+    global _user_sync_task
     logger.info("🛑 Shutting down Veil Xray API server...")
+    if _user_sync_task is not None and not _user_sync_task.done():
+        _user_sync_task.cancel()
+        try:
+            await _user_sync_task
+        except asyncio.CancelledError:
+            pass
     await config_task_queue.stop()
     logger.info("✅ Config task queue stopped")
     logger.info("✅ API server stopped")
@@ -569,7 +670,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="Veil Xray API",
     description="API для управления VLESS+Reality VPN сервером",
-    version="1.3.12",
+    version="1.3.13",
     lifespan=lifespan,
     **_docs_kw,
 )
@@ -599,14 +700,38 @@ async def root():
     return _health_payload()
 
 
-@app.post("/api/system/xray/sync-config", tags=["System"])
+@app.get(
+    "/api/system/xray/sync-status",
+    response_model=XraySyncStatusResponse,
+    tags=["System"],
+)
+async def get_xray_sync_status(token: str = Depends(verify_token)):
+    """Статус фоновой синхронизации пользователей БД → Xray."""
+    return XraySyncStatusResponse(**get_user_sync_status())
+
+
+@app.post(
+    "/api/system/xray/sync-config",
+    response_model=XraySyncStartResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+    tags=["System"],
+)
 async def sync_xray_config(token: str = Depends(verify_token)):
     """
-    Синхронизация активных ключей из БД в конфиг Xray и Xray API.
-    Алиас для логики старта приложения (sync_users_with_xray).
+    Запуск синхронизации активных ключей в фоне (не блокирует HTTP).
+    Статус: GET /api/system/xray/sync-status
     """
-    await sync_users_with_xray()
-    return {"success": True, "message": "Xray config synchronization completed"}
+    outcome = schedule_user_sync("api")
+    if outcome == "already_running":
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Xray user sync is already in progress",
+        )
+    return XraySyncStartResponse(
+        success=True,
+        status="started",
+        message="Xray user synchronization started in background",
+    )
 
 
 @app.post("/api/keys", response_model=KeyResponse, tags=["Keys"])

@@ -29,17 +29,51 @@ def test_public_health_bypasses_ip_whitelist(client, monkeypatch):
 
 
 def test_sync_xray_config(client, auth_headers, mock_xray_client, monkeypatch):
-    """Тест ручной синхронизации конфига Xray."""
-    from unittest.mock import AsyncMock
+    """Тест запуска фоновой синхронизации конфига Xray."""
+    monkeypatch.setattr("api.main.schedule_user_sync", lambda trigger: "started")
+    response = client.post(
+        "/api/system/xray/sync-config", headers=auth_headers
+    )
+    assert response.status_code == status.HTTP_202_ACCEPTED
+    data = response.json()
+    assert data["success"] is True
+    assert data["status"] == "started"
 
+
+def test_sync_xray_config_already_running(client, auth_headers, monkeypatch):
+    """Повторный sync-config при уже идущей синхронизации — 409."""
     monkeypatch.setattr(
-        "api.main.sync_users_with_xray", AsyncMock(return_value=None)
+        "api.main.schedule_user_sync", lambda trigger: "already_running"
     )
     response = client.post(
         "/api/system/xray/sync-config", headers=auth_headers
     )
+    assert response.status_code == status.HTTP_409_CONFLICT
+
+
+def test_sync_xray_status(client, auth_headers, monkeypatch):
+    """Тест статуса фоновой синхронизации."""
+    monkeypatch.setattr(
+        "api.main.get_user_sync_status",
+        lambda: {
+            "status": "completed",
+            "trigger": "startup",
+            "started_at": "2026-05-26T12:00:00+03:00",
+            "finished_at": "2026-05-26T12:00:14+03:00",
+            "synced_via_api": 10,
+            "synced_via_config": 10,
+            "skipped": 0,
+            "errors": 0,
+            "total_keys": 10,
+            "error_message": None,
+        },
+    )
+    response = client.get(
+        "/api/system/xray/sync-status", headers=auth_headers
+    )
     assert response.status_code == status.HTTP_200_OK
-    assert response.json()["success"] is True
+    assert response.json()["status"] == "completed"
+    assert response.json()["synced_via_api"] == 10
 
 
 def test_create_key(client, auth_headers):

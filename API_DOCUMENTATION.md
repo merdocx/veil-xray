@@ -143,7 +143,7 @@ curl -X POST "https://api.your-domain.com/api/keys" \
 
 **Кодировка:** UTF-8
 
-**Версия API:** 1.3.12
+**Версия API:** 1.3.13
 
 ---
 
@@ -233,7 +233,7 @@ GET /health
 
 #### `POST /api/system/xray/sync-config`
 
-Полная синхронизация активных ключей из БД в конфиг Xray и Xray API (та же логика, что при старте сервера). **Требует Bearer-токен.** Длительная операция (~1 с на ключ при ~101 ключах).
+Запуск **фоновой** синхронизации активных ключей (та же логика, что при старте сервера). **Требует Bearer-токен.** HTTP-ответ сразу; прогресс — через `sync-status`.
 
 **Запрос:**
 ```bash
@@ -241,15 +241,38 @@ POST /api/system/xray/sync-config
 Authorization: Bearer YOUR_SECRET_KEY
 ```
 
-**Ответ:**
+**Ответ (202 при старте):**
 ```json
 {
   "success": true,
-  "message": "Xray config synchronization completed"
+  "status": "started",
+  "message": "Xray user synchronization started in background"
 }
 ```
 
-**Рекомендация:** не вызывать в часы пиковой нагрузки на production.
+**Коды:** `409 Conflict` — синхронизация уже выполняется.
+
+#### `GET /api/system/xray/sync-status`
+
+Статус фоновой синхронизации (`idle` | `running` | `completed` | `failed`).
+
+**Ответ (пример после завершения):**
+```json
+{
+  "status": "completed",
+  "trigger": "startup",
+  "started_at": "2026-05-26T12:00:38+03:00",
+  "finished_at": "2026-05-26T12:00:52+03:00",
+  "synced_via_api": 101,
+  "synced_via_config": 101,
+  "skipped": 0,
+  "errors": 0,
+  "total_keys": 101,
+  "error_message": null
+}
+```
+
+**Рекомендация:** не вызывать `sync-config` в часы пиковой нагрузки на production.
 
 ---
 
@@ -1018,7 +1041,7 @@ def get_cached_keys():
 
 ---
 
-**Версия документации:** 1.3.12  
+**Версия документации:** 1.3.13  
 **Последнее обновление:** 2026-05-26
 
 ### Переменные окружения (эксплуатация)

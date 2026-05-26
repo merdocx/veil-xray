@@ -16,7 +16,7 @@
 
 | Действие | Риск |
 |----------|------|
-| `POST /api/system/xray/sync-config` | Синхронный полный sync всех ключей (~14 с на 101 ключ); таймаут nginx/клиента при высокой нагрузке |
+| `POST /api/system/xray/sync-config` | Запускает фоновый sync (~14 с на 101 ключ); не дублировать, пока `GET .../sync-status` = `running` |
 | `systemctl restart veil-xray-api` | Блокирующий startup sync до готовности |
 | `systemctl restart xray` | Обрыв активных VPN-сессий |
 

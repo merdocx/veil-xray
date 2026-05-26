@@ -1,7 +1,7 @@
 """Pydantic модели для API"""
 
 from pydantic import BaseModel, Field
-from typing import Optional
+from typing import Literal, Optional
 from datetime import datetime
 
 
@@ -67,3 +67,26 @@ class TrafficResetResponse(BaseModel):
     previous_upload: int
     previous_download: int
     previous_total: int
+
+
+class XraySyncStartResponse(BaseModel):
+    """Ответ при запуске фоновой синхронизации пользователей Xray."""
+
+    success: bool
+    status: Literal["started", "already_running"]
+    message: str
+
+
+class XraySyncStatusResponse(BaseModel):
+    """Статус фоновой синхронизации пользователей Xray."""
+
+    status: Literal["idle", "running", "completed", "failed"]
+    trigger: Optional[str] = None
+    started_at: Optional[str] = None
+    finished_at: Optional[str] = None
+    synced_via_api: Optional[int] = None
+    synced_via_config: Optional[int] = None
+    skipped: Optional[int] = None
+    errors: Optional[int] = None
+    total_keys: Optional[int] = None
+    error_message: Optional[str] = None
