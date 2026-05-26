@@ -5,6 +5,7 @@
 ## [1.3.14] - 2026-05-26
 
 ### Добавлено
+- Файл `VERSION`, скрипт `scripts/ops/deploy-prod.sh`.
 - Ночной рестарт Xray (`scripts/ops/cron-nightly-xray-restart.sh`, cron 04:00).
 - Отчёты baseline/SLO: `scripts/load-protection/baseline-report.sh` (daily + weekly cron).
 - `scripts/load-protection/apply-policy-connidle.sh`, `scripts/ops/install-ops-cron.sh`.
