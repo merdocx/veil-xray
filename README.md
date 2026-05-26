@@ -11,6 +11,15 @@
 - **Оптимизация для мобильных** - оптимизировано для v2raytun на iOS/Android
 - **SQLite база данных** - простая и надежная база данных
 
+## 📁 Документация и эксплуатация
+
+| Раздел | Файл |
+|--------|------|
+| **Сервисы, логи, ротация, автозапуск, мониторинг, бэкапы** | [docs/OPERATIONS.md](docs/OPERATIONS.md) |
+| Индекс всех документов | [docs/README.md](docs/README.md) |
+| Бэкапы SQLite и логирование API | [scripts/BACKUP_AND_LOGGING.md](scripts/BACKUP_AND_LOGGING.md) |
+| Защита от перегрузки (SLO, Netdata, baseline) | [docs/operations/load-protection/](docs/operations/load-protection/) |
+
 ## 📋 Требования
 
 - Python 3.11+
@@ -101,9 +110,13 @@ XRAY_API_PORT=10085
 
 ### 5. Настройка Xray
 
+**Маршрутизация (текущий пример в репозитории):** весь трафик с `vless-reality` идёт в **`upstream`** (SOCKS на `77.238.243.136:1080`), исключения: IP релея (`direct`), **UDP/TCP порт 53** → `direct` (DNS не через SOCKS, если на релее нет UDP), остальное — `upstream`; `geoip:private` → `block`. **Split RU / зарубеж временно отключён.** Восстановление split: [docs/operations/routing-split-ru-restore.md](docs/operations/routing-split-ru-restore.md). Установите **`geoip.dat`** и **`geosite.dat`** при использовании split. Подставьте адрес/порт SOCKS при необходимости.
+
+**Ключи Reality в примере:** в `config.example.json` указаны ключи в формате, пригодном для `xray -test`; для продакшена сгенерируйте свои (`xray x25519`) и подставьте вместо значений из примера.
+
 1. Установите Xray-core согласно [официальной документации](https://xtls.github.io/)
 2. Скопируйте `xray/config.example.json` в `/usr/local/etc/xray/config.json`
-3. Добавьте приватный ключ Reality в конфигурацию Xray
+3. Добавьте приватный ключ Reality в конфигурацию Xray (или оставьте из примера только для проверки, затем замените на свой)
 4. Настройте API endpoint в Xray:
 
 ```json

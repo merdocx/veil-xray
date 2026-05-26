@@ -1,209 +1,123 @@
 # Резервное копирование и логирование
 
+Пути ниже даны для стандартной установки в **`/root/veil-v2ray`**. При другом каталоге замените префикс.
+
 ## Резервное копирование базы данных
 
-### Автоматическое резервное копирование
+### Скрипт
 
-Резервное копирование базы данных настроено через cron задачу и выполняется автоматически каждый день в 2:00 ночи.
+- **Файл:** `scripts/backup_database.sh` (в каталоге проекта)
+- **База:** `{PROJECT_ROOT}/database/veil_xray.db`
+- **Архивы:** `{PROJECT_ROOT}/backups/`, имя `veil_xray_YYYYMMDD_HHMMSS.db.gz`
+- **Хранение:** 30 дней (настраивается в скрипте, `RETENTION_DAYS`)
 
-**Расположение:**
-- Скрипт: `/root/scripts/backup_database.sh`
-- Директория бэкапов: `/root/backups/`
-- Логи бэкапов: `/root/logs/backup.log`
-
-**Параметры:**
-- Хранение бэкапов: 30 дней
-- Автоматическое сжатие: включено (gzip)
-- Формат имени файла: `veil_xray_YYYYMMDD_HHMMSS.db.gz`
-
-### Ручное создание бэкапа
+### Ручной запуск
 
 ```bash
-/root/scripts/backup_database.sh
+/root/veil-v2ray/scripts/backup_database.sh
 ```
+
+### Расписание (cron)
+
+На прод-сервере проекта в **root crontab** добавлено ежедневное задание **02:00** с логом `logs/backup.log`. Для нового хоста добавьте вручную:
+
+```cron
+0 2 * * * /root/veil-v2ray/scripts/backup_database.sh >> /root/veil-v2ray/logs/backup.log 2>&1
+```
+
+Каталог `logs/` создаётся при первом запуске API или вручную: `mkdir -p /root/veil-v2ray/logs`.
+
+### Ротация `backup.log`
+
+На прод-сервере: **`/etc/logrotate.d/veil-v2ray-backup-log`** (ежемесячно, 12 архивов). Шаблон в репозитории: [logrotate/veil-v2ray-backup-log.example](logrotate/veil-v2ray-backup-log.example).
 
 ### Восстановление из бэкапа
 
 ```bash
-# Остановите API сервис
 sudo systemctl stop veil-xray-api
-
-# Распакуйте бэкап (если сжат)
-gunzip /root/backups/veil_xray_YYYYMMDD_HHMMSS.db.gz
-
-# Восстановите базу данных
-sqlite3 /root/database/veil_xray.db ".restore '/root/backups/veil_xray_YYYYMMDD_HHMMSS.db'"
-
-# Запустите API сервис
+gunzip -c /root/veil-v2ray/backups/veil_xray_YYYYMMDD_HHMMSS.db.gz > /tmp/restore.db
+sqlite3 /root/veil-v2ray/database/veil_xray.db ".restore '/tmp/restore.db'"
 sudo systemctl start veil-xray-api
 ```
 
-### Настройка расписания бэкапов
+---
 
-Для изменения расписания отредактируйте cron задачу:
+## Логирование API
+
+### Файл
+
+По умолчанию: **`{PROJECT_ROOT}/logs/veil_xray_api.log`**
+
+Задаётся в `.env` (`LOG_FILE`) и в [config/settings.py](../config/settings.py).
+
+### Ротация без logrotate
+
+Приложение использует **`RotatingFileHandler`**:
+
+- `LOG_MAX_BYTES` (по умолчанию **10 MB**)
+- `LOG_BACKUP_COUNT` (по умолчанию **5** файлов)
+
+Итого до ~60 MB на диске в каталоге `logs/`. Отдельный **`/etc/logrotate.d/veil-xray-api` не обязателен** и при дублировании с внутренней ротацией может мешать.
+
+### Journald
+
+Юнит `veil-xray-api.service` перенаправляет stdout/stderr в журнал:
 
 ```bash
-crontab -e
+journalctl -u veil-xray-api -f
 ```
 
-Текущее расписание: `0 2 * * *` (каждый день в 2:00)
+### Уровень логирования
 
-Примеры:
-- `0 */6 * * *` - каждые 6 часов
-- `0 0 * * 0` - каждое воскресенье в полночь
-- `0 2 * * 1-5` - каждый рабочий день в 2:00
-
-## Логирование
-
-### Файловое логирование
-
-Логи приложения записываются в файл: `/root/logs/veil_xray_api.log`
-
-**Настройки:**
-- Максимальный размер файла: 10MB
-- Количество ротированных файлов: 5
-- Формат: `%(asctime)s - %(name)s - %(levelname)s - %(message)s`
-- Уровень логирования: INFO (настраивается через `.env`)
-
-### Ротация логов
-
-Ротация логов настроена через logrotate и выполняется автоматически.
-
-**Конфигурация:** `/etc/logrotate.d/veil-xray-api`
-
-**Параметры:**
-- Ротация: ежедневно
-- Хранение: 30 дней
-- Сжатие: включено (с задержкой)
-- Права доступа: 0644 root root
-
-### Просмотр логов
-
-**Файловые логи:**
-```bash
-tail -f /root/logs/veil_xray_api.log
-```
-
-**Systemd journal:**
-```bash
-sudo journalctl -u veil-xray-api -f
-```
-
-**Последние записи:**
-```bash
-sudo journalctl -u veil-xray-api -n 100
-```
-
-**Логи за определенный период:**
-```bash
-sudo journalctl -u veil-xray-api --since "2025-11-26 00:00:00" --until "2025-11-26 23:59:59"
-```
-
-### Настройка уровня логирования
-
-Отредактируйте файл `.env`:
+В `.env`:
 
 ```env
-LOG_LEVEL=DEBUG  # DEBUG, INFO, WARNING, ERROR, CRITICAL
+LOG_LEVEL=INFO
 LOG_FILE=./logs/veil_xray_api.log
-LOG_MAX_BYTES=10485760  # 10MB
+LOG_MAX_BYTES=10485760
 LOG_BACKUP_COUNT=5
 ```
 
-После изменения перезапустите сервис:
+После изменения: `sudo systemctl restart veil-xray-api`.
+
+---
+
+## Логи Nginx (если используется)
+
+Обычно (имена могут отличаться в вашем `sites-enabled`):
+
+- `/var/log/nginx/veil-xray-api-access.log`
+- `/var/log/nginx/veil-xray-api-error.log`
+
+Ротация: системный пакет `nginx` через `/etc/logrotate.d/nginx` (`/var/log/nginx/*.log`).
+
+---
+
+## Логи Xray
+
+Конфиг: `/usr/local/etc/xray/config.json` (`log`). При запуске через `systemctl`:
 
 ```bash
-sudo systemctl restart veil-xray-api
+journalctl -u xray -f
 ```
 
-## Мониторинг
+---
 
-### Проверка статуса бэкапов
+## Мониторинг baseline
 
-```bash
-# Список бэкапов
-ls -lh /root/backups/
+См. [docs/operations/load-protection/02-monitoring-baseline.md](../docs/operations/load-protection/02-monitoring-baseline.md) — файл `/var/log/veil-baseline.log` и cron.
 
-# Размер директории бэкапов
-du -sh /root/backups/
-
-# Последние записи в логе бэкапов
-tail -n 20 /root/logs/backup.log
-```
-
-### Проверка ротации логов
-
-```bash
-# Тестовая ротация (без изменений)
-sudo logrotate -d /etc/logrotate.d/veil-xray-api
-
-# Принудительная ротация
-sudo logrotate -f /etc/logrotate.d/veil-xray-api
-```
-
-### Проверка размера логов
-
-```bash
-# Размер текущего лог-файла
-du -h /root/logs/veil_xray_api.log
-
-# Размер всех лог-файлов
-du -sh /root/logs/
-```
+---
 
 ## Устранение неполадок
 
-### Бэкап не создается
+### Бэкап не создаётся
 
-1. Проверьте права доступа:
-```bash
-ls -l /root/scripts/backup_database.sh
-chmod +x /root/scripts/backup_database.sh
-```
+- Права: `chmod +x /root/veil-v2ray/scripts/backup_database.sh`
+- Наличие `sqlite3`: `which sqlite3`
+- Лог cron (если настроен): `tail /root/veil-v2ray/logs/backup.log`
 
-2. Проверьте наличие sqlite3:
-```bash
-which sqlite3
-```
+### Логи API не пишутся
 
-3. Проверьте логи:
-```bash
-tail -n 50 /root/logs/backup.log
-```
-
-### Логи не записываются
-
-1. Проверьте права на директорию:
-```bash
-ls -ld /root/logs/
-mkdir -p /root/logs
-chmod 755 /root/logs
-```
-
-2. Проверьте конфигурацию в `.env`
-
-3. Перезапустите сервис:
-```bash
-sudo systemctl restart veil-xray-api
-```
-
-### Ротация не работает
-
-1. Проверьте конфигурацию:
-```bash
-cat /etc/logrotate.d/veil-xray-api
-```
-
-2. Проверьте статус logrotate:
-```bash
-sudo logrotate -d /etc/logrotate.d/veil-xray-api
-```
-
-3. Проверьте cron задачу logrotate:
-```bash
-grep logrotate /etc/cron.daily/logrotate
-```
-
-
-
-
+- `mkdir -p /root/veil-v2ray/logs` и права на запись пользователя сервиса
+- Проверка `.env` и перезапуск `veil-xray-api`

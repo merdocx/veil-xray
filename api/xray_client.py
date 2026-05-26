@@ -1,4 +1,5 @@
 """Клиент для работы с Xray API"""
+
 import asyncio
 import httpx
 import json
@@ -26,7 +27,9 @@ class XrayClient:
         self.timeout = 10.0
         self._is_available = None  # Кэш статуса доступности
 
-    async def _run_subprocess(self, cmd: list[str], timeout: float) -> subprocess.CompletedProcess:
+    async def _run_subprocess(
+        self, cmd: list[str], timeout: float
+    ) -> subprocess.CompletedProcess:
         return await asyncio.to_thread(
             subprocess.run, cmd, capture_output=True, text=True, timeout=timeout
         )
@@ -177,17 +180,17 @@ class XrayClient:
         wait=wait_exponential(multiplier=1, min=2, max=10),
         retry=retry_if_exception_type((subprocess.TimeoutExpired, FileNotFoundError)),
         reraise=True,
-        before_sleep=lambda retry_state: logger.warning(
-            f"🔄 Retrying add_user (attempt {retry_state.attempt_number}/3) "
-            f"for UUID {retry_state.args[0][:8] if retry_state.args and len(retry_state.args) > 0 else 'unknown'}... "
-            f"after {retry_state.next_action.sleep if retry_state.next_action else 0} seconds"
-        )
-        if retry_state.attempt_number < 3
-        else None,
+        before_sleep=lambda retry_state: (
+            logger.warning(
+                f"🔄 Retrying add_user (attempt {retry_state.attempt_number}/3) "
+                f"for UUID {retry_state.args[0][:8] if retry_state.args and len(retry_state.args) > 0 else 'unknown'}... "
+                f"after {retry_state.next_action.sleep if retry_state.next_action else 0} seconds"
+            )
+            if retry_state.attempt_number < 3
+            else None
+        ),
     )
-    async def add_user(
-        self, uuid: str, email: str, flow: Optional[str] = None
-    ) -> bool:
+    async def add_user(self, uuid: str, email: str, flow: Optional[str] = None) -> bool:
         """
         Добавление пользователя в Xray через API с retry механизмом
 
@@ -284,13 +287,15 @@ class XrayClient:
         wait=wait_exponential(multiplier=1, min=2, max=10),
         retry=retry_if_exception_type((subprocess.TimeoutExpired, FileNotFoundError)),
         reraise=True,
-        before_sleep=lambda retry_state: logger.warning(
-            f"🔄 Retrying remove_user (attempt {retry_state.attempt_number}/3) "
-            f"for email {retry_state.args[0] if retry_state.args and len(retry_state.args) > 0 else 'unknown'} "
-            f"after {retry_state.next_action.sleep if retry_state.next_action else 0} seconds"
-        )
-        if retry_state.attempt_number < 3
-        else None,
+        before_sleep=lambda retry_state: (
+            logger.warning(
+                f"🔄 Retrying remove_user (attempt {retry_state.attempt_number}/3) "
+                f"for email {retry_state.args[0] if retry_state.args and len(retry_state.args) > 0 else 'unknown'} "
+                f"after {retry_state.next_action.sleep if retry_state.next_action else 0} seconds"
+            )
+            if retry_state.attempt_number < 3
+            else None
+        ),
     )
     async def remove_user(self, email: str) -> bool:
         """

@@ -1,4 +1,5 @@
 """Тесты для ConfigTaskQueue"""
+
 import pytest
 import asyncio
 from api.task_queue import ConfigTaskQueue, TaskType, ConfigTask

@@ -110,7 +110,7 @@ echo "🎉 Настройка завершена!"
 echo ""
 echo "📋 Параметры для внешнего бота:"
 echo "   API URL: https://$SUBDOMAIN"
-echo "   API Key: см. API_SECRET_KEY в /root/.env (не выводится в консоль)"
+echo "   API Key: $(grep API_SECRET_KEY /root/.env | cut -d'=' -f2)"
 echo "   V2Ray Path: /usr/local/bin/xray"
 echo ""
 

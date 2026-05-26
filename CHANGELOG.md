@@ -2,6 +2,26 @@
 
 Все значимые изменения в проекте будут документироваться в этом файле.
 
+## [1.3.12] - 2026-05-26
+
+### Добавлено
+- `GET /health` и публичный health без IP whitelist (`/` и `/health`).
+- `POST /api/system/xray/sync-config` — ручная синхронизация ключей с Xray.
+- Модуль `api/errors.py`: таймауты SQLite → HTTP 503, IntegrityError → 409.
+- `.gitleaks.toml` и job `secrets` в CI.
+- Настройка `traffic_cache_ttl_s` в `config/settings.py`.
+
+### Исправлено
+- `db_module.SessionLocal()` для sync трафика (корректная БД в тестах и проде).
+- Изоляция pytest: `VEIL_SKIP_STARTUP`, отдельный `LOG_FILE`.
+- Логи сканеров (`.env`, `wp-admin`, …) на уровне DEBUG вместо WARNING.
+
+### Изменено
+- FastAPI `lifespan` вместо `@app.on_event`.
+- `secrets.compare_digest` для API-токена; доверенный разбор IP за loopback-прокси.
+- systemd: `127.0.0.1`, hardening, без `--limit-max-requests`.
+- CI: строгие black/pytest/coverage + gitleaks.
+
 ## [1.3.10] - 2026-02-24
 
 ### 🔧 Исправлено

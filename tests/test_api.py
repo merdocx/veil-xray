@@ -1,6 +1,9 @@
 """Тесты для API endpoints"""
+
 import pytest
 from fastapi import status
+
+from config.settings import settings
 
 
 def test_root(client):
@@ -8,6 +11,35 @@ def test_root(client):
     response = client.get("/")
     assert response.status_code == status.HTTP_200_OK
     assert response.json()["status"] == "ok"
+
+
+def test_health(client):
+    """Тест /health для мониторинга (nginx и uvicorn)."""
+    response = client.get("/health")
+    assert response.status_code == status.HTTP_200_OK
+    assert response.json()["service"] == "veil-xray-api"
+
+
+def test_public_health_bypasses_ip_whitelist(client, monkeypatch):
+    """GET / и /health доступны без IP из API_ALLOWED_IPS."""
+    monkeypatch.setattr(settings, "api_allowed_ips", "127.0.0.1")
+    assert client.get("/health").status_code == status.HTTP_200_OK
+    assert client.get("/").status_code == status.HTTP_200_OK
+    assert client.get("/api/keys", headers={}).status_code == status.HTTP_403_FORBIDDEN
+
+
+def test_sync_xray_config(client, auth_headers, mock_xray_client, monkeypatch):
+    """Тест ручной синхронизации конфига Xray."""
+    from unittest.mock import AsyncMock
+
+    monkeypatch.setattr(
+        "api.main.sync_users_with_xray", AsyncMock(return_value=None)
+    )
+    response = client.post(
+        "/api/system/xray/sync-config", headers=auth_headers
+    )
+    assert response.status_code == status.HTTP_200_OK
+    assert response.json()["success"] is True
 
 
 def test_create_key(client, auth_headers):
@@ -228,20 +260,16 @@ def test_get_vless_link_unauthorized(client):
 
 
 def test_create_key_config_failure(client, auth_headers, monkeypatch):
-    """Тест создания ключа при ошибке сохранения конфигурации"""
+    """Создание ключа возвращает 200: выдача в Xray/конфиг идёт в фоне (BackgroundTasks)."""
     from api.main import xray_config_manager, config_task_queue
     from unittest.mock import AsyncMock
 
-    # Мокируем execute_task_and_wait чтобы возвращал False
-    # Это симулирует ситуацию, когда очередь задач не может выполнить задачу
     async def mock_execute_task_and_wait(*args, **kwargs):
         return False
 
-    # Мокируем add_user_to_config чтобы возвращал False (fallback тоже должен вернуть False)
     original_add = xray_config_manager.add_user_to_config
     xray_config_manager.add_user_to_config = lambda *args, **kwargs: False
 
-    # Мокируем execute_task_and_wait
     original_execute = config_task_queue.execute_task_and_wait
     config_task_queue.execute_task_and_wait = mock_execute_task_and_wait
 
@@ -249,7 +277,7 @@ def test_create_key_config_failure(client, auth_headers, monkeypatch):
         response = client.post(
             "/api/keys", json={"name": "test_key"}, headers=auth_headers
         )
-        assert response.status_code == status.HTTP_500_INTERNAL_SERVER_ERROR
+        assert response.status_code == status.HTTP_200_OK
     finally:
         xray_config_manager.add_user_to_config = original_add
         config_task_queue.execute_task_and_wait = original_execute

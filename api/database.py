@@ -1,4 +1,5 @@
 """Модели базы данных"""
+
 from sqlalchemy import (
     create_engine,
     Column,
@@ -9,12 +10,11 @@ from sqlalchemy import (
     Index,
 )
 from sqlalchemy import event
-from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import sessionmaker, relationship
+from sqlalchemy.orm import declarative_base, sessionmaker, relationship
 from sqlalchemy.pool import NullPool
 from config.settings import settings
 
-Base = declarative_base()  # type: ignore
+Base = declarative_base()
 
 
 class Key(Base):  # type: ignore
@@ -81,6 +81,7 @@ engine = create_engine(db_url, connect_args=connect_args, **engine_kwargs)
 
 
 if "sqlite" in db_url:
+
     @event.listens_for(engine, "connect")
     def _set_sqlite_pragmas(dbapi_connection, connection_record):  # type: ignore[no-redef]
         cursor = dbapi_connection.cursor()
@@ -92,6 +93,7 @@ if "sqlite" in db_url:
             cursor.execute("PRAGMA busy_timeout=5000;")
         finally:
             cursor.close()
+
 
 # Создание сессии
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)

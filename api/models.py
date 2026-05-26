@@ -1,4 +1,5 @@
 """Pydantic модели для API"""
+
 from pydantic import BaseModel, Field
 from typing import Optional
 from datetime import datetime
@@ -7,7 +8,9 @@ from datetime import datetime
 class KeyCreate(BaseModel):
     """Модель для создания ключа"""
 
-    name: Optional[str] = Field(None, max_length=255, description="Имя ключа (максимум 255 символов)")
+    name: Optional[str] = Field(
+        None, max_length=255, description="Имя ключа (максимум 255 символов)"
+    )
 
 
 class KeyResponse(BaseModel):

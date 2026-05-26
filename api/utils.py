@@ -1,4 +1,5 @@
 """Вспомогательные функции"""
+
 import uuid
 import secrets
 import string
@@ -42,11 +43,10 @@ def generate_reality_keys():
         encoding=serialization.Encoding.Raw, format=serialization.PublicFormat.Raw
     )
 
-    # Кодирование в base64
-    # Для приватного ключа используем стандартный base64 (для конфигурации Xray)
-    private_key_b64 = base64.b64encode(private_bytes).decode("utf-8")
-    # Для публичного ключа используем URL-safe base64 (для VLESS ссылок)
-    # Это необходимо, так как ключ будет использоваться в URL параметрах
+    # Кодирование как в `xray x25519`: base64.RawURLEncoding без padding (иначе Xray: invalid privateKey)
+    private_key_b64 = (
+        base64.urlsafe_b64encode(private_bytes).decode("utf-8").rstrip("=")
+    )
     public_key_b64 = base64.urlsafe_b64encode(public_bytes).decode("utf-8").rstrip("=")
 
     return public_key_b64, private_key_b64
@@ -91,7 +91,7 @@ def build_vless_link(
         "sid": short_id,
         "spx": "/",
     }
-    
+
     # Добавляем flow только если он указан и не равен "none"
     # Некоторые клиенты (например, v2raytun) не поддерживают flow=none
     if flow_val and flow_val.lower() != "none":
@@ -109,25 +109,24 @@ def build_vless_link(
 def parse_key_identifier(identifier: str) -> Tuple[Optional[str], Optional[int], bool]:
     """
     Определение типа идентификатора ключа (UUID или key_id)
-    
+
     Args:
         identifier: Идентификатор ключа (может быть UUID или key_id)
-        
+
     Returns:
         Кортеж (uuid, key_id, is_uuid):
         - uuid: UUID строка, если identifier является UUID, иначе None
         - key_id: Целое число, если identifier является key_id, иначе None
         - is_uuid: True если это UUID, False если key_id
-        
+
     Raises:
         ValueError: Если формат идентификатора неверный
     """
     # UUID содержит дефисы и имеет формат: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
     uuid_pattern = re.compile(
-        r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$',
-        re.IGNORECASE
+        r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$", re.IGNORECASE
     )
-    
+
     if "-" in identifier:
         # Проверяем, является ли это валидным UUID
         if uuid_pattern.match(identifier):
