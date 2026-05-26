@@ -153,8 +153,10 @@
   "policy": {
     "levels": {
       "0": {
-        "handshake": 60,
-        "connIdle": 1200,
+        "handshake": 4,
+        "connIdle": 300,
+        "uplinkOnly": 2,
+        "downlinkOnly": 5,
         "bufferSize": 256,
         "statsUserUplink": true,
         "statsUserDownlink": true

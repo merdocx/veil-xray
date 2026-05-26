@@ -1,3 +1,19 @@
+## [1.3.16] - 2026-05-26
+
+### Документация
+- [docs/operations/RECOMMENDED_SETTINGS.md](docs/operations/RECOMMENDED_SETTINGS.md) — единая шпаргалка (policy, SLO, routing, sysctl)
+- README: prod-маршрутизация через **wg-egress** (не только SOCKS example)
+- SERVER_PROFILE: пороги FIN-WAIT **500/800**, auto-restart **800**
+
+### Policy Xray (рекомендуемые значения)
+- `handshake` **4**, `connIdle` **300**, `bufferSize` **256**, `uplinkOnly` **2**, `downlinkOnly` **5**
+- `scripts/load-protection/apply-policy-recommended.sh`; `apply-policy-connidle.sh` → wrapper
+
+### SLO / TCP ops
+- `slo-thresholds.env`: FIN-WAIT warn **500**, crit **800**; `TCP_RESTART_FIN_WAIT_CRIT=800`
+- `check-slo.sh`: ratio FIN/ESTAB только при ESTAB ≥ 100
+- `auto-restart-xray-on-tcp.sh`: порог из `TCP_RESTART_FIN_WAIT_CRIT`
+
 ## [1.3.15] - 2026-05-26
 
 ### Документация

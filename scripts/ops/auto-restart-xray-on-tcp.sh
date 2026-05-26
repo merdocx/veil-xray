@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Условный рестарт Xray при устойчивом давлении FIN-WAIT на :443.
-# Гистерезис: FIN_WAIT_CRIT подряд STREAK_REQUIRED раз (cron */5), не чаще 1×/час.
+# Гистерезис: FIN_WAIT > TCP_RESTART_FIN_WAIT_CRIT подряд STREAK_REQUIRED раз (cron */5), не чаще 1×/час.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/load-protection"
@@ -12,6 +12,7 @@ STATE="${VEIL_TCP_RESTART_STATE:-/var/lib/veil-xray-tcp-restart.state}"
 STREAK_REQUIRED="${TCP_RESTART_STREAK:-3}"
 MIN_INTERVAL_S="${TCP_RESTART_MIN_INTERVAL_S:-3600}"
 LISTEN_PORT="${LISTEN_PORT:-443}"
+RESTART_FIN_WAIT_CRIT="${TCP_RESTART_FIN_WAIT_CRIT:-800}"
 
 FIN_WAIT_443="0"
 EST_443="0"
@@ -32,7 +33,7 @@ fi
 
 TS="$(date -Iseconds)"
 trigger=0
-if [[ "$FIN_WAIT_443" -gt "${FIN_WAIT_CRIT:-1500}" ]]; then
+if [[ "$FIN_WAIT_443" -gt "$RESTART_FIN_WAIT_CRIT" ]]; then
   streak=$((streak + 1))
 else
   streak=0
@@ -46,7 +47,7 @@ if [[ "$streak" -ge "$STREAK_REQUIRED" ]]; then
 fi
 
 if [[ "$trigger" -eq 1 ]]; then
-  msg="${TS} restart fin_wait=${FIN_WAIT_443} est=${EST_443} streak=${streak}"
+  msg="${TS} restart fin_wait=${FIN_WAIT_443} est=${EST_443} streak=${streak} crit=${RESTART_FIN_WAIT_CRIT}"
   echo "$msg" >>"$LOG"
   logger -t veil-tcp-restart "$msg"
   if systemctl is-active --quiet xray 2>/dev/null; then

@@ -4,9 +4,11 @@
 
 ## Поля
 
-- **`handshake`** (секунды) — таймаут этапа рукопожатия.
-- **`connIdle`** (секунды) — простой соединения до закрытия. На прод-сервере с **2026-05-26**: **1200** (20 мин), было 1800 (30 мин). Снижение ускоряет освобождение TCP при пиках; при жалобах на обрывы — поднять до 1500–1800. Применение: `scripts/load-protection/apply-policy-connidle.sh` + `systemctl restart xray`.
-- **`bufferSize`** (КБ на соединение) — в **example** `256`; на **prod** **`512`**. При давлении RAM можно снизить до 256 off-peak + рестарт Xray.
+- **`handshake`** — **4** с (рекомендация Xray docs; было 60).
+- **`connIdle`** — **300** с (default Xray; было 1200/1800). При обрывах idle — поднять до 600–900; при FIN-WAIT — не выше 300 без baseline.
+- **`uplinkOnly` / `downlinkOnly`** — **2** / **5** с (Xray docs).
+- **`bufferSize`** — **256** KiB (best practice при ~100 пользователях; было 512).
+- Применение: `scripts/load-protection/apply-policy-recommended.sh` + `systemctl restart xray`.
 
 Сверяйте имена и единицы с [документацией Policy](https://xtls.github.io/config/policy.html) для **вашей** версии Xray.
 

@@ -673,7 +673,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="Veil Xray API",
     description="API для управления VLESS+Reality VPN сервером",
-    version="1.3.15",
+    version="1.3.16",
     lifespan=lifespan,
     **_docs_kw,
 )

@@ -2,7 +2,7 @@
 
 Сводка для продакшена. Путь проекта: `/root/veil-v2ray`.
 
-**Эталон всех лимитов и примеров `.env` / SLO / sysctl:** [operations/SERVER_PROFILE.md](operations/SERVER_PROFILE.md) (2 vCPU, 4 GiB, v1.3.15).
+**Эталон:** [operations/SERVER_PROFILE.md](operations/SERVER_PROFILE.md) · **Рекомендуемые значения:** [operations/RECOMMENDED_SETTINGS.md](operations/RECOMMENDED_SETTINGS.md) (v1.3.16).
 
 ## Автозапуск (systemd)
 

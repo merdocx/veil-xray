@@ -47,11 +47,13 @@ cd /root/veil-v2ray
 ```bash
 cd /root/veil-v2ray
 /root/veil-v2ray/scripts/ops/git-with-credentials.sh pull --ff-only origin main
-# при изменении зависимостей или unit-файлов — по CHANGELOG:
-systemctl daemon-reload
-systemctl restart veil-xray-api   # если менялся API
-systemctl restart xray             # если менялся config.json
+/root/veil-v2ray/scripts/ops/deploy-prod.sh
 ```
+
+`deploy-prod.sh` применяет sysctl, cron, **policy recommended** (если отличается от эталона), перезапускает API.  
+После смены только `config.json` на хосте вручную: `xray -test` и `systemctl restart xray`.
+
+Рекомендуемые значения: [RECOMMENDED_SETTINGS.md](RECOMMENDED_SETTINGS.md).
 
 ## Troubleshooting
 

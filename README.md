@@ -1,6 +1,6 @@
 # Veil Xray - VLESS+Reality VPN Server with API Management
 
-**Версия:** 1.3.15 · **Prod:** 2 vCPU / 4 GiB (см. [SERVER_PROFILE](docs/operations/SERVER_PROFILE.md), [VERSION](VERSION), [CHANGELOG](CHANGELOG.md))
+**Версия:** 1.3.16 · **Prod:** 2 vCPU / 4 GiB (см. [SERVER_PROFILE](docs/operations/SERVER_PROFILE.md), [VERSION](VERSION), [CHANGELOG](CHANGELOG.md))
 Сервер VPN на базе Xray с протоколом VLESS+Reality и REST API для управления пользователями и мониторинга трафика.
 
 ## 🚀 Особенности
@@ -20,6 +20,7 @@
 | Индекс всех документов | [docs/README.md](docs/README.md) |
 | Бэкапы SQLite и логирование API | [scripts/BACKUP_AND_LOGGING.md](scripts/BACKUP_AND_LOGGING.md) |
 | **Профиль prod-сервера (лимиты, .env, SLO)** | [docs/operations/SERVER_PROFILE.md](docs/operations/SERVER_PROFILE.md) |
+| **Рекомендуемые настройки (policy, SLO, routing)** | [docs/operations/RECOMMENDED_SETTINGS.md](docs/operations/RECOMMENDED_SETTINGS.md) |
 | Защита от перегрузки (SLO, baseline) | [docs/operations/load-protection/](docs/operations/load-protection/) |
 
 ## 📋 Требования
@@ -112,7 +113,9 @@ XRAY_API_PORT=10085
 
 ### 5. Настройка Xray
 
-**Маршрутизация (текущий пример в репозитории):** весь трафик с `vless-reality` идёт в **`upstream`** (SOCKS на `77.238.243.136:1080`), исключения: IP релея (`direct`), **UDP/TCP порт 53** → `direct` (DNS не через SOCKS, если на релее нет UDP), остальное — `upstream`; `geoip:private` → `block`. **Split RU / зарубеж временно отключён.** Восстановление split: [docs/operations/routing-split-ru-restore.md](docs/operations/routing-split-ru-restore.md). Установите **`geoip.dat`** и **`geosite.dat`** при использовании split. Подставьте адрес/порт SOCKS при необходимости.
+**Маршрутизация на prod:** весь трафик с `vless-reality` → **`wg-egress`** (WireGuard на `77.238.243.136`, mark `0x77`); DNS :53 тоже через `wg-egress`; IP релея → `direct`; `geoip:private` → `block`. Проверка: `curl -4 --interface wg0 https://api.ipify.org` → `77.238.243.136`. Подробно: [docs/operations/RECOMMENDED_SETTINGS.md](docs/operations/RECOMMENDED_SETTINGS.md), [SERVER_PROFILE](docs/operations/SERVER_PROFILE.md).
+
+**Пример в репозитории** (`xray/config.example.json`): outbound **`upstream`** (SOCKS) — для стендов без WG; на prod используйте **`wg-egress`**. Split RU отключён: [routing-split-ru-restore.md](docs/operations/routing-split-ru-restore.md).
 
 **Ключи Reality в примере:** в `config.example.json` указаны ключи в формате, пригодном для `xray -test`; для продакшена сгенерируйте свои (`xray x25519`) и подставьте вместо значений из примера.
 

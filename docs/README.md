@@ -9,6 +9,7 @@
 | [../TZ.md](../TZ.md) | Техническое задание (если есть) |
 | [../CHANGELOG.md](../CHANGELOG.md) | История изменений |
 | [operations/SERVER_PROFILE.md](operations/SERVER_PROFILE.md) | **Эталон лимитов и настроек prod (2 vCPU / 4 GiB)** |
+| [operations/RECOMMENDED_SETTINGS.md](operations/RECOMMENDED_SETTINGS.md) | **Рекомендуемые policy, SLO, routing, деплой** |
 | [operations/load-protection/](operations/load-protection/) | SLO, baseline, policy Xray, systemd, stress-mode |
 | [operations/routing-split-ru-restore.md](operations/routing-split-ru-restore.md) | Восстановление split RU/foreign после режима «всё через relay» |
 | [operations/routing-all-via-relay.md](operations/routing-all-via-relay.md) | Аудит: весь трафик через релей и допустимые исключения |

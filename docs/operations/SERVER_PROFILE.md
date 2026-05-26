@@ -1,6 +1,6 @@
 # Профиль production-сервера (эталон настроек)
 
-**Актуально на:** 2026-05-26 · **Версия veil-xray:** 1.3.15 · **Хост:** v3091624 (VDSina)
+**Актуально на:** 2026-05-26 · **Версия veil-xray:** 1.3.16 · **Хост:** v3091624 (VDSina)
 
 Этот документ — **единый справочник** лимитов и примеров конфигурации для текущего узла. При смене тарифа, порогов или policy обновляйте его вместе с `scripts/load-protection/slo-thresholds.env` и [08-capacity-decision.md](load-protection/08-capacity-decision.md).
 
@@ -94,12 +94,13 @@ LOG_LEVEL=INFO
 
 | Поле | Значение | Комментарий |
 |------|----------|-------------|
-| `handshake` | `60` | сек |
-| `connIdle` | **`1200`** | 20 мин idle → закрытие TCP |
-| `bufferSize` | **`512`** | KiB на соединение (в example — `256` для экономии RAM) |
+| `handshake` | **`4`** | сек (Xray docs / best practice) |
+| `connIdle` | **`300`** | 5 мин idle (Xray default; было 1200) |
+| `uplinkOnly` / `downlinkOnly` | **`2`** / **`5`** | закрытие half-close (Xray docs) |
+| `bufferSize` | **`256`** | KiB на соединение (было 512 на prod) |
 | `statsUserUplink/Downlink` | `true` | статистика по email |
 
-Применение `connIdle`: `scripts/load-protection/apply-policy-connidle.sh` + рестарт Xray.
+Применение policy: `scripts/load-protection/apply-policy-recommended.sh` + рестарт Xray.
 
 ### Маршрутизация (схема)
 
@@ -147,8 +148,8 @@ vless://<uuid>@193.124.65.182:443?type=tcp&security=reality&sni=microsoft.com&fp
 | `MemAvailable` | **&lt; 1.5 GiB** | **&lt; 1 GiB** | KiB: 1536000 / 1048576 |
 | RSS xray | **&gt; 512 MiB** | **&gt; 768 MiB** | при MemoryMax=1G |
 | TCP ESTAB :443 | **2500** | **4000** | `ss` established |
-| FIN-WAIT :443 | **1200** | **2500** | забивание TCP |
-| FIN-WAIT / ESTAB ×100 | **150%** | **250%** | только если ESTAB &gt; 0 |
+| FIN-WAIT :443 | **500** | **800** | забивание TCP |
+| FIN-WAIT / ESTAB ×100 | **150%** | **250%** | только если ESTAB ≥ 100 |
 
 Коды выхода `check-slo.sh`: `0` ok, `1` warn, `2` crit.
 
@@ -165,7 +166,7 @@ vless://<uuid>@193.124.65.182:443?type=tcp&security=reality&sni=microsoft.com&fp
 
 `scripts/ops/auto-restart-xray-on-tcp.sh`:
 
-- `FIN_WAIT_443` &gt; **1500** три проверки подряд (cron */5)  
+- `FIN_WAIT_443` &gt; **800** (`TCP_RESTART_FIN_WAIT_CRIT`) три проверки подряд (cron */5)  
 - не чаще **1 раз в час**  
 - лог: `/var/log/veil-xray-tcp-restart.log`
 

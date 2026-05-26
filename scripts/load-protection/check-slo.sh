@@ -67,7 +67,8 @@ elif [[ "${FIN_WAIT_443:-0}" -gt "${FIN_WAIT_WARN:-800}" ]]; then
   REASONS+=("fin_wait_${LISTEN_PORT}=${FIN_WAIT_443}>${FIN_WAIT_WARN}")
 fi
 
-if [[ "${EST_443:-0}" -gt 0 && "${FIN_WAIT_443:-0}" -gt 0 ]]; then
+# Отношение FIN/ESTAB полезно на больших числах, но шумит при малом ESTAB (после рестартов).
+if [[ "${EST_443:-0}" -ge 100 && "${FIN_WAIT_443:-0}" -gt 0 ]]; then
   FIN_RATIO="$(awk -v f="${FIN_WAIT_443}" -v e="${EST_443}" 'BEGIN { printf "%.0f", (f/e)*100 }')"
   if [[ "$FIN_RATIO" -gt "${FIN_WAIT_RATIO_CRIT:-200}" ]]; then
     [[ "$LEVEL" != "crit" ]] && LEVEL="crit"

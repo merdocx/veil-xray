@@ -32,15 +32,24 @@ fi
 echo "==> cron"
 "${REPO}/scripts/ops/install-ops-cron.sh"
 
-echo "==> policy connIdle (idempotent)"
-if [[ -x "${REPO}/scripts/load-protection/apply-policy-connidle.sh" ]]; then
-  current="$(python3 -c "import json; print(json.load(open('/usr/local/etc/xray/config.json'))['policy']['levels']['0'].get('connIdle',0))" 2>/dev/null || echo 0)"
-  if [[ "$current" != "1200" ]]; then
-    "${REPO}/scripts/load-protection/apply-policy-connidle.sh"
+echo "==> policy recommended (idempotent)"
+if [[ -x "${REPO}/scripts/load-protection/apply-policy-recommended.sh" ]]; then
+  need_apply=0
+  for pair in "handshake:4" "connIdle:300" "bufferSize:256"; do
+    key="${pair%%:*}"
+    want="${pair##*:}"
+    current="$(python3 -c "import json; p=json.load(open('/usr/local/etc/xray/config.json'))['policy']['levels']['0']; print(p.get('${key}', ''))" 2>/dev/null || echo "")"
+    if [[ "$current" != "$want" ]]; then
+      need_apply=1
+      break
+    fi
+  done
+  if [[ "$need_apply" -eq 1 ]]; then
+    "${REPO}/scripts/load-protection/apply-policy-recommended.sh"
     systemctl restart xray
     sleep 2
   else
-    echo "connIdle already 1200"
+    echo "policy already at recommended values"
   fi
 fi
 

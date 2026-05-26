@@ -2,7 +2,7 @@
 
 Краткие правила эксплуатации production-узла. **Лимиты и примеры .env:** [SERVER_PROFILE.md](SERVER_PROFILE.md). Подробнее: [OPERATIONS.md](../OPERATIONS.md), [load-protection/](load-protection/).
 
-**Текущий узел:** 2 vCPU / 4 GiB · ~100 ключей · veil-xray **1.3.15**.
+**Текущий узел:** 2 vCPU / 4 GiB · ~100 ключей · veil-xray **1.3.16**.
 
 ## Запрещено на production
 
@@ -40,7 +40,7 @@
 | `5 6 * * *` | Отчёт за 1 день → `/var/log/veil-baseline-report.log` |
 | `10 6 * * 1` | Отчёт за 7 дней (понедельник) |
 
-**policy.connIdle:** 1200 с — `apply-policy-connidle.sh`; пересмотр через 1–2 нед по `baseline-report.sh`.
+**policy:** handshake 4, connIdle 300, bufferSize 256 — `apply-policy-recommended.sh`; пересмотр connIdle через `baseline-report.sh`.
 
 ## Снижение посторонней нагрузки
 

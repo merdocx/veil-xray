@@ -69,11 +69,11 @@ awk '/est_tcp/ {print}' /var/log/veil-baseline.log | tail -500
 |---------|----------------------|---------------------|
 | TCP ESTAB :443 max | 2888 | ~400–450 типично |
 | FIN-WAIT :443 max | 4098 | ~700–800 (всё ещё > ESTAB) |
-| connIdle | 1800 → **1200** | Оставить 1200 до weekly baseline |
+| connIdle | 1200 → **300** | Xray docs default (2026-05-26 evening) |
 | traffic_cache_ttl_s | 1800 | **3600** (меньше SQLite в пик) |
 | sync config | 101× save | **1× save** (`bulk_sync_vless_clients`) |
 
-**connIdle (п.6):** обрывов не зафиксировано — **1200 без изменений**; пересмотр по `baseline-report.sh 7` на **2026-06-09**.
+**connIdle:** с **2026-05-26** — **300** (recommended); пересмотр по `baseline-report.sh 7` на **2026-06-09** при обрывах или FIN-WAIT.
 
 **Мониторинг:** `check-slo.sh` + `fin_wait_*`; `alert-tcp-pressure.sh`; опциональный `auto-restart-xray-on-tcp.sh` (3× crit подряд, max 1/h).
 
