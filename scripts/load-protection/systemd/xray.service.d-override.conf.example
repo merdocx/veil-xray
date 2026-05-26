@@ -1,0 +1,8 @@
+[Service]
+# См. docs/operations/load-protection/01-slo-draft-this-host.md — на проде задано MemoryMax=512M
+MemoryMax=512M
+# Optional: cap CPU if xray starves SSH/monitoring on small VPS
+# CPUQuota=80%
+
+Restart=on-failure
+RestartSec=3

@@ -1,4 +1,5 @@
 """Тесты для XrayClient"""
+
 import subprocess
 import pytest
 from unittest.mock import AsyncMock, patch, MagicMock

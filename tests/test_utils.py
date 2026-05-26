@@ -1,4 +1,5 @@
 """Тесты для утилит"""
+
 import pytest
 from api.utils import generate_uuid, generate_short_id, build_vless_link
 
@@ -74,11 +75,9 @@ def test_generate_reality_keys():
     import base64
 
     try:
-        # Публичный ключ в URL-safe формате (без padding)
-        # Добавляем padding если нужно
-        public_key_padded = public_key + "=" * (4 - len(public_key) % 4)
-        base64.urlsafe_b64decode(public_key_padded)
-        # Приватный ключ в стандартном base64 формате
-        base64.b64decode(private_key)
+        # Оба ключа — RawURLEncoding без padding (как `xray x25519`)
+        for k in (public_key, private_key):
+            padded = k + "=" * ((4 - len(k) % 4) % 4)
+            base64.urlsafe_b64decode(padded)
     except Exception:
         pytest.fail("Keys are not valid base64")

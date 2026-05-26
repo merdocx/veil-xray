@@ -1,29 +1,28 @@
 """Конфигурация приложения"""
+
 from pydantic_settings import BaseSettings
-from typing import List, Optional
-
-
-def parse_csv_list(value: str) -> List[str]:
-    """Разбор списка значений через запятую из .env."""
-    return [item.strip() for item in value.split(",") if item.strip()]
+from typing import Optional, List
 
 
 class Settings(BaseSettings):
     """Настройки приложения"""
 
     # API настройки
-    api_host: str = "0.0.0.0"
+    # По умолчанию только loopback: прод-схема Nginx → 127.0.0.1:port
+    api_host: str = "127.0.0.1"
     api_port: int = 8000
     api_secret_key: str = "change-me-in-production"
 
-    # IP whitelist (через запятую). Пусто — блокировать все, кроме GET /
-    api_allowed_ips: str = (
-        "77.246.105.29,46.151.31.105,212.118.52.195,95.142.47.150,89.110.76.53,127.0.0.1"
-    )
+    # Список IP, с которых разрешён доступ к API (через запятую).
+    # Административные сервера + 127.0.0.1 для локальных проверок на хосте.
+    api_allowed_ips: str = "127.0.0.1,89.110.76.53,91.184.245.209"
 
-    # CORS: origins через запятую; пусто — middleware CORS не подключается
-    cors_origins: str = ""
-    cors_allow_credentials: bool = False
+    # Swagger/ReDoc/OpenAPI (в проде обычно выключено)
+    api_enable_docs: bool = False
+
+    # CORS: пустая строка — без CORS (подходит для server-to-server / curl).
+    # Через запятую: https://a.com,https://b.com
+    api_cors_origins: str = ""
 
     # База данных
     database_url: str = "sqlite:///./database/veil_xray.db"
@@ -60,17 +59,27 @@ class Settings(BaseSettings):
     log_max_bytes: int = 10485760  # 10MB
     log_backup_count: int = 5  # Хранить 5 ротированных файлов
 
+    # Фоновая синхронизация трафика Xray → SQLite
+    enable_background_traffic_sync: bool = False
+    background_traffic_sync_interval_s: int = 600
+    background_traffic_sync_batch_size: int = 50
+
+    # Кэш статистики трафика в памяти (секунды; 1800 = 30 мин)
+    traffic_cache_ttl_s: int = 1800
+
     class Config:
         env_file = ".env"
         case_sensitive = False
 
+    @property
+    def allowed_ip_list(self) -> List[str]:
+        return [x.strip() for x in self.api_allowed_ips.split(",") if x.strip()]
+
+    @property
+    def cors_origin_list(self) -> List[str]:
+        if not self.api_cors_origins.strip():
+            return []
+        return [x.strip() for x in self.api_cors_origins.split(",") if x.strip()]
+
 
 settings = Settings()
-
-
-def get_allowed_ips() -> List[str]:
-    return parse_csv_list(settings.api_allowed_ips)
-
-
-def get_cors_origins() -> List[str]:
-    return parse_csv_list(settings.cors_origins)

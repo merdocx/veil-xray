@@ -2,14 +2,29 @@
   "log": {
     "loglevel": "warning"
   },
+  "geoip": {
+    "path": "/usr/local/share/xray/geoip.dat"
+  },
+  "geosite": {
+    "path": "/usr/local/share/xray/geosite.dat"
+  },
   "api": {
     "tag": "api",
     "services": [
-      "StatsService",
-      "HandlerService"
+      "HandlerService",
+      "StatsService"
     ]
   },
   "inbounds": [
+    {
+      "tag": "api-in",
+      "listen": "127.0.0.1",
+      "port": 10085,
+      "protocol": "dokodemo-door",
+      "settings": {
+        "address": "127.0.0.1"
+      }
+    },
     {
       "tag": "vless-reality",
       "port": 443,
@@ -34,12 +49,12 @@
             "microsoft.com",
             "www.microsoft.com"
           ],
-          "privateKey": "YOUR_PRIVATE_KEY_HERE",
+          "privateKey": "qPJxhnMf5TqLNBmrLkFe6mG7TOAiQFHMNMbHZF8Ji2A",
           "minClientVer": "",
           "maxClientVer": "",
           "maxTimeDiff": 0,
           "shortIds": [
-            "YOUR_SHORT_ID_HERE"
+            "7bb45050"
           ]
         },
         "tcpSettings": {
@@ -53,12 +68,25 @@
         "enabled": true,
         "destOverride": [
           "http",
-          "tls"
+          "tls",
+          "quic"
         ]
       }
     }
   ],
   "outbounds": [
+    {
+      "protocol": "socks",
+      "settings": {
+        "servers": [
+          {
+            "address": "77.238.243.136",
+            "port": 1080
+          }
+        ]
+      },
+      "tag": "upstream"
+    },
     {
       "protocol": "freedom",
       "settings": {},
@@ -75,6 +103,45 @@
     "rules": [
       {
         "type": "field",
+        "inboundTag": [
+          "api-in"
+        ],
+        "outboundTag": "api"
+      },
+      {
+        "type": "field",
+        "ip": [
+          "77.238.243.136"
+        ],
+        "outboundTag": "direct"
+      },
+      {
+        "type": "field",
+        "inboundTag": [
+          "vless-reality"
+        ],
+        "network": "udp",
+        "port": "53",
+        "outboundTag": "direct"
+      },
+      {
+        "type": "field",
+        "inboundTag": [
+          "vless-reality"
+        ],
+        "network": "tcp",
+        "port": "53",
+        "outboundTag": "direct"
+      },
+      {
+        "type": "field",
+        "inboundTag": [
+          "vless-reality"
+        ],
+        "outboundTag": "upstream"
+      },
+      {
+        "type": "field",
         "ip": [
           "geoip:private"
         ],
@@ -86,6 +153,9 @@
   "policy": {
     "levels": {
       "0": {
+        "handshake": 60,
+        "connIdle": 1800,
+        "bufferSize": 512,
         "statsUserUplink": true,
         "statsUserDownlink": true
       }
@@ -96,4 +166,3 @@
     }
   }
 }
-

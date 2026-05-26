@@ -1,4 +1,5 @@
 """Управление конфигурацией Xray"""
+
 import json
 import logging
 import subprocess

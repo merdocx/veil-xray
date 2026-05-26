@@ -1,4 +1,5 @@
 """Тесты для database модуля"""
+
 import pytest
 import tempfile
 import os

@@ -28,6 +28,8 @@ ENV/
 *.sqlite
 *.sqlite3
 database/*.db
+database/*.db-shm
+database/*.db-wal
 backups/
 
 # IDE
@@ -40,6 +42,9 @@ backups/
 # Environment
 .env
 .env.local
+
+# SSH (не коммитить ключи)
+.ssh/
 
 # Logs
 *.log
@@ -76,11 +81,9 @@ htmlcov/
 
 # Bash history
 .bash_history
-
-# Server / shell artifacts (must not be in repo)
-.ssh/
-.viminfo
 .bashrc
 .profile
-.cache/
+.viminfo
+.coverage
+.pytest_cache/
 

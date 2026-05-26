@@ -1,4 +1,5 @@
 """Тесты для XrayConfigManager"""
+
 import pytest
 import json
 import tempfile
