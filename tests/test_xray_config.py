@@ -263,3 +263,18 @@ def test_reload_config(mock_run, config_manager):
             # Может вернуть False если процесс не найден или не может быть перезапущен
             # Но в тестовой среде это нормально
             assert isinstance(result, bool)
+
+
+def test_bulk_sync_vless_clients(config_manager, sample_config):
+    """Один save при массовой синхронизации."""
+    from unittest.mock import patch
+
+    users = [
+        ("uuid-a", "a@x"),
+        ("uuid-b", "b@x"),
+    ]
+    with patch.object(config_manager, "save_config", return_value=True) as mock_save:
+        result = config_manager.bulk_sync_vless_clients(users, validate=False, test=False)
+    assert result["saved"] is True
+    assert result["added"] == 2
+    assert mock_save.call_count == 1

@@ -33,7 +33,7 @@
 | Расписание | Задача |
 |------------|--------|
 | `* * * * *` | `monitor-baseline.sh` → `/var/log/veil-baseline.log` (+ `fin_wait_443`, `tcp_orphan`) |
-| `*/5 * * * *` | `check-slo.sh`, `alert-slo-crit.sh` |
+| `*/5 * * * *` | `check-slo.sh`, `alert-slo-crit.sh`, `alert-tcp-pressure.sh` (FIN-WAIT crit), `auto-restart-xray-on-tcp.sh` |
 | `0 4 * * *` | Ночной рестарт Xray → `/var/log/veil-xray-restart.log` |
 | `5 6 * * *` | Отчёт за 1 день → `/var/log/veil-baseline-report.log` |
 | `10 6 * * 1` | Отчёт за 7 дней (понедельник) |

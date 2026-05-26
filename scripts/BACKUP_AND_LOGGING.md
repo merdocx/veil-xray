@@ -121,3 +121,19 @@ journalctl -u xray -f
 
 - `mkdir -p /root/veil-v2ray/logs` и права на запись пользователя сервиса
 - Проверка `.env` и перезапуск `veil-xray-api`
+
+
+## Ротация ops-логов (рекомендация)
+
+Файлы `/var/log/veil-slo.log`, `/var/log/veil-baseline.log` растут от cron. Пример `/etc/logrotate.d/veil-ops`:
+
+```
+/var/log/veil-slo.log /var/log/veil-baseline.log /var/log/veil-xray-tcp-restart.log {
+    weekly
+    rotate 4
+    compress
+    missingok
+    notifempty
+    copytruncate
+}
+```

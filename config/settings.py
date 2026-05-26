@@ -1,6 +1,6 @@
 """Конфигурация приложения"""
 
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
 from typing import Optional, List
 
 
@@ -65,11 +65,9 @@ class Settings(BaseSettings):
     background_traffic_sync_batch_size: int = 50
 
     # Кэш статистики трафика в памяти (секунды; 1800 = 30 мин)
-    traffic_cache_ttl_s: int = 1800
+    traffic_cache_ttl_s: int = 3600
 
-    class Config:
-        env_file = ".env"
-        case_sensitive = False
+    model_config = SettingsConfigDict(env_file=".env", case_sensitive=False)
 
     @property
     def allowed_ip_list(self) -> List[str]:

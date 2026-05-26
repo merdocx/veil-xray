@@ -155,7 +155,7 @@
       "0": {
         "handshake": 60,
         "connIdle": 1200,
-        "bufferSize": 512,
+        "bufferSize": 256,
         "statsUserUplink": true,
         "statsUserDownlink": true
       }

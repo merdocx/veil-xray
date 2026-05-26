@@ -168,6 +168,94 @@ class XrayConfigManager:
             logger.error(f"❌ Error saving Xray config: {e}")
             return False
 
+
+    def _get_vless_inbound(self, config: dict) -> Optional[dict]:
+        for inbound in config.get("inbounds", []):
+            if inbound.get("protocol") == "vless":
+                return inbound
+        return None
+
+    def _ensure_common_short_id_in_config(
+        self, config: dict, common_short_id: str
+    ) -> bool:
+        """Добавить общий short_id в config (in-memory). Возвращает True если изменён."""
+        vless_inbound = self._get_vless_inbound(config)
+        if not vless_inbound:
+            return False
+        stream_settings = vless_inbound.setdefault("streamSettings", {})
+        reality_settings = stream_settings.setdefault("realitySettings", {})
+        short_ids = reality_settings.get("shortIds", [])
+        if common_short_id not in short_ids:
+            short_ids.append(common_short_id)
+            reality_settings["shortIds"] = short_ids
+            return True
+        return False
+
+    def _add_client_in_config(
+        self, vless_inbound: dict, uuid: str, email: Optional[str] = None
+    ) -> bool:
+        """Добавить клиента в inbound. True если новый клиент добавлен."""
+        clients = vless_inbound["settings"].setdefault("clients", [])
+        if any(client.get("id") == uuid for client in clients):
+            return False
+        if not email:
+            email = f"user_{uuid[:8]}"
+        clients.append(
+            {"id": uuid, "flow": settings.reality_flow, "email": email}
+        )
+        vless_inbound["settings"]["clients"] = clients
+        return True
+
+    def bulk_sync_vless_clients(
+        self,
+        users: List[Tuple[str, Optional[str]]],
+        validate: bool = True,
+        test: bool = True,
+    ) -> dict:
+        """
+        Синхронизация списка VLESS-клиентов в config.json одной записью на диск.
+
+        users: список (uuid, email).
+        """
+        result = {
+            "added": 0,
+            "already_present": 0,
+            "saved": False,
+            "error": None,
+        }
+        try:
+            config = self.load_config()
+            vless_inbound = self._get_vless_inbound(config)
+            if not vless_inbound:
+                result["error"] = "VLESS inbound not found"
+                return result
+
+            common_short_id = settings.reality_common_short_id
+            if self._ensure_common_short_id_in_config(config, common_short_id):
+                logger.info(
+                    f"✅ Added common short_id '{common_short_id}' during bulk sync"
+                )
+
+            for uuid, email in users:
+                if self._add_client_in_config(vless_inbound, uuid, email):
+                    result["added"] += 1
+                else:
+                    result["already_present"] += 1
+
+            if self.save_config(config, validate=validate, test=test):
+                result["saved"] = True
+                logger.info(
+                    "✅ Bulk VLESS sync saved once: "
+                    f"added={result['added']} already_present={result['already_present']}"
+                )
+            else:
+                result["error"] = "save_config failed"
+            return result
+        except Exception as e:
+            logger.error(f"Error in bulk_sync_vless_clients: {e}")
+            result["error"] = str(e)
+            return result
+
     def ensure_common_short_id(self, common_short_id: str) -> bool:
         """
         Убедиться, что общий short_id присутствует в конфигурации Xray
@@ -180,48 +268,22 @@ class XrayConfigManager:
         """
         try:
             config = self.load_config()
-
-            # Находим VLESS inbound
-            vless_inbound = None
-            for inbound in config.get("inbounds", []):
-                if inbound.get("protocol") == "vless":
-                    vless_inbound = inbound
-                    break
-
-            if not vless_inbound:
+            if not self._get_vless_inbound(config):
                 logger.error("VLESS inbound not found in Xray config")
                 return False
-
-            # Проверяем и обновляем shortIds в realitySettings
-            stream_settings = vless_inbound.get("streamSettings", {})
-            if "realitySettings" not in stream_settings:
-                stream_settings["realitySettings"] = {}
-
-            reality_settings = stream_settings["realitySettings"]
-            short_ids = reality_settings.get("shortIds", [])
-
-            if common_short_id not in short_ids:
-                short_ids.append(common_short_id)
-                reality_settings["shortIds"] = short_ids
-                stream_settings["realitySettings"] = reality_settings
-                vless_inbound["streamSettings"] = stream_settings
+            if self._ensure_common_short_id_in_config(config, common_short_id):
                 logger.info(
                     f"✅ Added common short_id '{common_short_id}' to Xray config"
                 )
-
-                # Сохраняем конфигурацию
                 if self.save_config(config):
                     logger.info(
                         f"✅ Common short_id '{common_short_id}' configured in Xray"
                     )
                     return True
-                else:
-                    logger.error("Failed to save Xray config with common short_id")
-                    return False
-            else:
-                logger.debug(f"Common short_id '{common_short_id}' already in config")
-                return True
-
+                logger.error("Failed to save Xray config with common short_id")
+                return False
+            logger.debug(f"Common short_id '{common_short_id}' already in config")
+            return True
         except Exception as e:
             logger.error(f"Error ensuring common short_id: {e}")
             return False
@@ -243,44 +305,23 @@ class XrayConfigManager:
         """
         try:
             config = self.load_config()
-
-            # Находим VLESS inbound
-            vless_inbound = None
-            for inbound in config.get("inbounds", []):
-                if inbound.get("protocol") == "vless":
-                    vless_inbound = inbound
-                    break
-
+            vless_inbound = self._get_vless_inbound(config)
             if not vless_inbound:
                 logger.error("VLESS inbound not found in Xray config")
                 return False
 
-            # Убеждаемся, что общий short_id присутствует в конфигурации
             common_short_id = settings.reality_common_short_id
-            self.ensure_common_short_id(common_short_id)
+            self._ensure_common_short_id_in_config(config, common_short_id)
 
-            # Проверяем, есть ли уже такой пользователь
-            clients = vless_inbound["settings"].get("clients", [])
-            if any(client.get("id") == uuid for client in clients):
-                logger.info(f"User {uuid[:8]}... already exists in config")
-            else:
-                # Добавляем пользователя
-                if not email:
-                    email = f"user_{uuid[:8]}"
-
-                new_client = {"id": uuid, "flow": settings.reality_flow, "email": email}
-                clients.append(new_client)
-                vless_inbound["settings"]["clients"] = clients
+            if self._add_client_in_config(vless_inbound, uuid, email):
                 logger.info(f"Added user {uuid[:8]}... to Xray config")
+            else:
+                logger.info(f"User {uuid[:8]}... already exists in config")
 
-            # НЕ добавляем Short ID в realitySettings - используем общий short_id для всех
-            # Общий short_id должен быть уже настроен в конфигурации Xray
-            # Это позволяет избежать перезагрузки Xray при создании/удалении ключей
             logger.info(
                 f"User {uuid[:8]}... added to Xray config (using common short_id)"
             )
 
-            # Сохраняем конфигурацию (только для UUID, short_id не меняется)
             if self.save_config(config):
                 logger.info(f"User {uuid[:8]}... added to Xray config")
                 # UUID уже добавлен через Xray API 'adu' - работает сразу

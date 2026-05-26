@@ -62,6 +62,21 @@ grep 'level=warn' /var/log/veil-slo.log | wc -l
 awk '/est_tcp/ {print}' /var/log/veil-baseline.log | tail -500
 ```
 
+
+## Обновление после внедрения 1.3.15 (2026-05-26)
+
+| Метрика | До правок (пик 26.05) | После правок (днём) |
+|---------|----------------------|---------------------|
+| TCP ESTAB :443 max | 2888 | ~400–450 типично |
+| FIN-WAIT :443 max | 4098 | ~700–800 (всё ещё > ESTAB) |
+| connIdle | 1800 → **1200** | Оставить 1200 до weekly baseline |
+| traffic_cache_ttl_s | 1800 | **3600** (меньше SQLite в пик) |
+| sync config | 101× save | **1× save** (`bulk_sync_vless_clients`) |
+
+**connIdle (п.6):** обрывов не зафиксировано — **1200 без изменений**; пересмотр по `baseline-report.sh 7` на **2026-06-09**.
+
+**Мониторинг:** `check-slo.sh` + `fin_wait_*`; `alert-tcp-pressure.sh`; опциональный `auto-restart-xray-on-tcp.sh` (3× crit подряд, max 1/h).
+
 ## Связанные документы
 
 - [02-monitoring-baseline.md](02-monitoring-baseline.md)

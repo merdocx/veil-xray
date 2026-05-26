@@ -21,8 +21,10 @@ if pgrep -x xray >/dev/null 2>&1; then
 fi
 
 EST_443="0"
+FIN_WAIT_443="0"
 if command -v ss >/dev/null 2>&1; then
   EST_443="$(ss -tan state established sport = ":${LISTEN_PORT}" 2>/dev/null | tail -n +2 | wc -l | tr -d ' ')"
+  FIN_WAIT_443="$(ss -tan sport = ":${LISTEN_PORT}" 2>/dev/null | awk '$1=="FIN-WAIT-1"{c++} END{print c+0}')"
 fi
 
 LEVEL="ok"
@@ -57,8 +59,27 @@ elif [[ "$EST_443" -gt "$EST_TCP_WARN" ]]; then
   REASONS+=("est_${LISTEN_PORT}=${EST_443}>${EST_TCP_WARN}")
 fi
 
+if [[ "${FIN_WAIT_443:-0}" -gt "${FIN_WAIT_CRIT:-1500}" ]]; then
+  [[ "$LEVEL" != "crit" ]] && LEVEL="crit"
+  REASONS+=("fin_wait_${LISTEN_PORT}=${FIN_WAIT_443}>${FIN_WAIT_CRIT}")
+elif [[ "${FIN_WAIT_443:-0}" -gt "${FIN_WAIT_WARN:-800}" ]]; then
+  [[ "$LEVEL" == "ok" ]] && LEVEL="warn"
+  REASONS+=("fin_wait_${LISTEN_PORT}=${FIN_WAIT_443}>${FIN_WAIT_WARN}")
+fi
+
+if [[ "${EST_443:-0}" -gt 0 && "${FIN_WAIT_443:-0}" -gt 0 ]]; then
+  FIN_RATIO="$(awk -v f="${FIN_WAIT_443}" -v e="${EST_443}" 'BEGIN { printf "%.0f", (f/e)*100 }')"
+  if [[ "$FIN_RATIO" -gt "${FIN_WAIT_RATIO_CRIT:-200}" ]]; then
+    [[ "$LEVEL" != "crit" ]] && LEVEL="crit"
+    REASONS+=("fin_wait_ratio=${FIN_RATIO}>${FIN_WAIT_RATIO_CRIT}")
+  elif [[ "$FIN_RATIO" -gt "${FIN_WAIT_RATIO_WARN:-150}" ]]; then
+    [[ "$LEVEL" == "ok" ]] && LEVEL="warn"
+    REASONS+=("fin_wait_ratio=${FIN_RATIO}>${FIN_WAIT_RATIO_WARN}")
+  fi
+fi
+
 REASON_STR="$(IFS=,; echo "${REASONS[*]:-}")"
-LINE="${TS} level=${LEVEL} load1=${LOAD1} load_per_cpu=${LOAD_PER_CPU} ncpu=${NCPU} mem_avail_kb=${MEM_AVAIL_KB} xray_rss_kb=${XRAY_RSS_KB} est_tcp_sport_${LISTEN_PORT}=${EST_443} reasons=${REASON_STR}"
+LINE="${TS} level=${LEVEL} load1=${LOAD1} load_per_cpu=${LOAD_PER_CPU} ncpu=${NCPU} mem_avail_kb=${MEM_AVAIL_KB} xray_rss_kb=${XRAY_RSS_KB} est_tcp_sport_${LISTEN_PORT}=${EST_443} fin_wait_${LISTEN_PORT}=${FIN_WAIT_443:-0} reasons=${REASON_STR}"
 echo "$LINE" >> "$LOG"
 
 # Ненулевой код только при crit (удобно для внешнего алерта)

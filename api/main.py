@@ -452,34 +452,33 @@ async def sync_users_with_xray() -> dict[str, int]:
         skipped_count = 0
         error_count = 0
 
-        # Используем общий short_id для всех пользователей
-        common_short_id = settings.reality_common_short_id
+        users_for_config = [
+            (key.uuid, f"user_{key.id}_{key.uuid[:8]}") for key in keys
+        ]
+        try:
+            bulk = xray_config_manager.bulk_sync_vless_clients(users_for_config)
+            if bulk.get("saved"):
+                synced_config_count = bulk.get("added", 0) + bulk.get(
+                    "already_present", 0
+                )
+                logger.info(
+                    "✅ Bulk config sync: "
+                    f"added={bulk.get('added')} "
+                    f"already_present={bulk.get('already_present')} "
+                    "(single save_config)"
+                )
+            elif bulk.get("error"):
+                error_count += 1
+                logger.error(f"Bulk config sync failed: {bulk.get('error')}")
+        except Exception as config_error:
+            error_count += 1
+            logger.error(f"Bulk config sync exception: {config_error}")
 
         for key in keys:
             try:
                 email = f"user_{key.id}_{key.uuid[:8]}"
-                config_updated = False
                 api_updated = False
 
-                # Сначала обновляем конфигурационный файл (всегда)
-                # Это гарантирует, что пользователь будет в конфиге даже если API недоступен
-                try:
-                    config_success = xray_config_manager.add_user_to_config(
-                        uuid=key.uuid, short_id=common_short_id, email=email
-                    )
-                    if config_success:
-                        config_updated = True
-                        synced_config_count += 1
-                        logger.debug(
-                            f"✅ Added user {key.id} (UUID: {key.uuid[:8]}...) "
-                            f"to Xray config file"
-                        )
-                except Exception as config_error:
-                    logger.warning(
-                        f"⚠️  Failed to add user {key.id} to config file: {config_error}"
-                    )
-
-                # Затем пытаемся добавить через Xray API (если доступен)
                 if xray_api_available:
                     try:
                         api_success = await xray_client.add_user(
@@ -504,8 +503,7 @@ async def sync_users_with_xray() -> dict[str, int]:
                             f"⚠️  Failed to add user {key.id} to Xray API: {api_error}"
                         )
 
-                # Если ни API, ни конфиг не обновились, считаем пропущенным
-                if not config_updated and not api_updated:
+                if not api_updated:
                     skipped_count += 1
 
             except Exception as e:
@@ -677,7 +675,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="Veil Xray API",
     description="API для управления VLESS+Reality VPN сервером",
-    version="1.3.14",
+    version="1.3.15",
     lifespan=lifespan,
     **_docs_kw,
 )

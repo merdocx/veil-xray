@@ -15,6 +15,8 @@ PATH=/usr/local/sbin:/usr/local/bin:/sbin:/bin:/usr/sbin:/usr/bin
 * * * * * root ${REPO}/scripts/load-protection/monitor-baseline.sh >> /var/log/veil-baseline.log 2>&1
 */5 * * * * root ${REPO}/scripts/load-protection/check-slo.sh
 */5 * * * * root ${REPO}/scripts/load-protection/alert-slo-crit.sh
+*/5 * * * * root ${REPO}/scripts/load-protection/alert-tcp-pressure.sh
+*/5 * * * * root ${REPO}/scripts/ops/auto-restart-xray-on-tcp.sh
 0 4 * * * root ${REPO}/scripts/ops/cron-nightly-xray-restart.sh
 5 6 * * * root ${REPO}/scripts/load-protection/baseline-report.sh 1 >> /var/log/veil-baseline-report.log 2>&1
 10 6 * * 1 root ${REPO}/scripts/load-protection/baseline-report.sh 7 >> /var/log/veil-baseline-report.log 2>&1
@@ -25,7 +27,7 @@ chmod 644 "$DEST"
 
 # Убрать дубликаты из root crontab, если остались от прошлых установок
 tmp="$(mktemp)"
-crontab -l 2>/dev/null | grep -vE 'monitor-baseline|check-slo\.sh|alert-slo-crit|cron-nightly-xray|baseline-report|backup_database' >"$tmp" || true
+crontab -l 2>/dev/null | grep -vE 'monitor-baseline|check-slo\.sh|alert-slo-crit|alert-tcp-pressure|auto-restart-xray-on-tcp|cron-nightly-xray|baseline-report|backup_database' >"$tmp" || true
 crontab "$tmp" 2>/dev/null || true
 rm -f "$tmp"
 

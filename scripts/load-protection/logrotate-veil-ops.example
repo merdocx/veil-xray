@@ -1,7 +1,6 @@
-/var/log/veil-xray-restart.log
-/var/log/veil-baseline-report.log {
+/var/log/veil-slo.log /var/log/veil-baseline.log /var/log/veil-baseline-report.log /var/log/veil-xray-tcp-restart.log /var/log/veil-xray-restart.log {
     weekly
-    rotate 8
+    rotate 4
     compress
     delaycompress
     missingok

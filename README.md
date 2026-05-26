@@ -1,5 +1,6 @@
 # Veil Xray - VLESS+Reality VPN Server with API Management
 
+**Версия:** 1.3.15 (см. [VERSION](VERSION), [CHANGELOG](CHANGELOG.md))
 Сервер VPN на базе Xray с протоколом VLESS+Reality и REST API для управления пользователями и мониторинга трафика.
 
 ## 🚀 Особенности

@@ -1,3 +1,12 @@
+## [1.3.15] - 2026-05-26
+
+### Стабильность VPN / ops
+- FIN-WAIT в `check-slo.sh`, `alert-tcp-pressure.sh`, пороги в `slo-thresholds.env`
+- `bulk_sync_vless_clients`: один `save_config` при sync (вместо 101)
+- `auto-restart-xray-on-tcp.sh` (гистерезис, max 1×/час)
+- `traffic_cache_ttl_s` по умолчанию 3600
+- Pydantic `model_config` в settings/models
+
 # Changelog
 
 Все значимые изменения в проекте будут документироваться в этом файле.
