@@ -12,13 +12,24 @@
 
 Тесты на prod изолированы в `tests/conftest.py` (`VEIL_SKIP_STARTUP`, отдельный `LOG_FILE`), но **запуск на prod всё равно нежелателен**.
 
-## Осторожно в часы пик
+## Осторожно в часы пик (08:00–23:59 MSK)
 
 | Действие | Риск |
 |----------|------|
-| `POST /api/system/xray/sync-config` | Запускает фоновый sync (~14 с на 101 ключ); не дублировать, пока `GET .../sync-status` = `running` |
-| `systemctl restart veil-xray-api` | Блокирующий startup sync до готовности |
-| `systemctl restart xray` | Обрыв активных VPN-сессий |
+| `POST /api/system/xray/sync-config` | **503 в пик** (автоблок); обход: `VEIL_ALLOW_SYNC_IN_PEAK=1` в env сервиса |
+| `systemctl restart veil-xray-api` | Краткий простой API; не делать в пик без необходимости |
+| `systemctl restart xray` | Обрыв всех VPN-сессий на 1–2 с — только `./scripts/ops/restart-xray-safe.sh` |
+
+Проверка пика: `scripts/ops/is-peak-msk.sh` (exit 0 = пик).
+
+## TCP tuning (применено на хосте)
+
+Файл: `/etc/sysctl.d/99-veil-tcp.conf` (шаблон в `scripts/load-protection/sysctl-tcp-tuning.conf`).
+
+## Снижение посторонней нагрузки
+
+- **Netdata** на prod отключён (`systemctl disable netdata`) — при необходимости: `systemctl enable --now netdata`.
+- **Cursor IDE** (remote) потребляет RAM только пока открыта SSH-сессия разработки.
 
 **Рекомендация:** массовый sync и рестарты API — в окно низкой нагрузки (ночь MSK) или после предупреждения пользователей.
 

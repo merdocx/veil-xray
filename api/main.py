@@ -24,6 +24,7 @@ import secrets
 from contextlib import asynccontextmanager
 from datetime import datetime
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 import api.database as db_module
 from api.database import get_db, Key, TrafficStats, init_db
@@ -695,6 +696,12 @@ if settings.cors_origin_list:
     )
 
 
+def _is_peak_hours_msk() -> bool:
+    """08:00–23:59 MSK — не запускать тяжёлый sync-config (см. PRODUCTION_RUNBOOK)."""
+    hour = datetime.now(ZoneInfo("Europe/Moscow")).hour
+    return 8 <= hour <= 23
+
+
 def _health_payload() -> dict[str, str]:
     return {"status": "ok", "service": "veil-xray-api"}
 
@@ -727,6 +734,14 @@ async def sync_xray_config(token: str = Depends(verify_token)):
     Запуск синхронизации активных ключей в фоне (не блокирует HTTP).
     Статус: GET /api/system/xray/sync-status
     """
+    if _is_peak_hours_msk() and os.getenv("VEIL_ALLOW_SYNC_IN_PEAK") != "1":
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=(
+                "sync-config disabled during peak hours (08:00–23:59 MSK). "
+                "Retry off-peak or set VEIL_ALLOW_SYNC_IN_PEAK=1 on server."
+            ),
+        )
     outcome = schedule_user_sync("api")
     if outcome == "already_running":
         raise HTTPException(
