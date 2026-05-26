@@ -51,9 +51,9 @@ from api.utils import (
 from config.settings import settings
 
 # Простой in-memory кэш для статистики трафика
-traffic_cache: dict[int, tuple[int, int, int, int]] = (
-    {}
-)  # key_id -> (upload, download, cached_at, updated_at)
+traffic_cache: dict[
+    int, tuple[int, int, int, int]
+] = {}  # key_id -> (upload, download, cached_at, updated_at)
 ENABLE_BACKGROUND_TRAFFIC_SYNC = settings.enable_background_traffic_sync
 BACKGROUND_TRAFFIC_SYNC_INTERVAL_S = settings.background_traffic_sync_interval_s
 BACKGROUND_TRAFFIC_SYNC_BATCH_SIZE = settings.background_traffic_sync_batch_size
@@ -136,19 +136,22 @@ async def _run_user_sync_job(trigger: str) -> None:
             }
         )
 
+
 # Публичные пути без IP whitelist (health для мониторинга)
 _PUBLIC_PATHS = frozenset({"/", "/health"})
 
 # Типовые пути сканеров — не засоряют WARNING в логах
-_SCANNER_PROBE_EXACT = frozenset({
-    "/",
-    "/favicon.ico",
-    "/robots.txt",
-    "/sitemap.xml",
-    "/metrics",
-    "/.env",
-    "/health",
-})
+_SCANNER_PROBE_EXACT = frozenset(
+    {
+        "/",
+        "/favicon.ico",
+        "/robots.txt",
+        "/sitemap.xml",
+        "/metrics",
+        "/.env",
+        "/health",
+    }
+)
 _SCANNER_PROBE_SUBSTRINGS = (
     ".env",
     ".git",
@@ -221,6 +224,7 @@ logger = logging.getLogger(__name__)
 _docs_kw = {}
 if not settings.api_enable_docs:
     _docs_kw = {"docs_url": None, "redoc_url": None, "openapi_url": None}
+
 
 # Middleware для логирования запросов и ошибок
 class LoggingMiddleware(BaseHTTPMiddleware):
@@ -334,7 +338,9 @@ class IPWhitelistMiddleware(BaseHTTPMiddleware):
             )
             return JSONResponse(
                 status_code=status.HTTP_403_FORBIDDEN,
-                content={"detail": "Access denied. API IP whitelist is not configured."},
+                content={
+                    "detail": "Access denied. API IP whitelist is not configured."
+                },
             )
 
         client_ip = _get_client_ip(request)
@@ -914,9 +920,7 @@ async def delete_key(
                     uuid=key.uuid, short_id=common_short_id  # type: ignore
                 )
             except Exception as fallback_error:
-                logger.error(
-                    f"❌ Fallback config removal also failed: {fallback_error}"
-                )
+                logger.error(f"❌ Fallback config removal also failed: {fallback_error}")
                 config_success = False
 
         # Если удаление из конфигурации не удалось, логируем предупреждение
@@ -976,7 +980,10 @@ async def get_traffic(
         current_time = int(time.time())
         cached_stats = traffic_cache.get(key_id)
 
-        if cached_stats and (current_time - cached_stats[2]) < settings.traffic_cache_ttl_s:
+        if (
+            cached_stats
+            and (current_time - cached_stats[2]) < settings.traffic_cache_ttl_s
+        ):
             # Используем кэшированные значения
             upload = cached_stats[0]
             download = cached_stats[1]
@@ -1488,9 +1495,7 @@ async def delete_key_by_uuid(
                     uuid=key.uuid, short_id=common_short_id  # type: ignore
                 )
             except Exception as fallback_error:
-                logger.error(
-                    f"❌ Fallback config removal also failed: {fallback_error}"
-                )
+                logger.error(f"❌ Fallback config removal also failed: {fallback_error}")
                 config_success = False
 
         if not config_success:

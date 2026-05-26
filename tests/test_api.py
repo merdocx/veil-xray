@@ -31,9 +31,7 @@ def test_public_health_bypasses_ip_whitelist(client, monkeypatch):
 def test_sync_xray_config(client, auth_headers, mock_xray_client, monkeypatch):
     """Тест запуска фоновой синхронизации конфига Xray."""
     monkeypatch.setattr("api.main.schedule_user_sync", lambda trigger: "started")
-    response = client.post(
-        "/api/system/xray/sync-config", headers=auth_headers
-    )
+    response = client.post("/api/system/xray/sync-config", headers=auth_headers)
     assert response.status_code == status.HTTP_202_ACCEPTED
     data = response.json()
     assert data["success"] is True
@@ -45,9 +43,7 @@ def test_sync_xray_config_already_running(client, auth_headers, monkeypatch):
     monkeypatch.setattr(
         "api.main.schedule_user_sync", lambda trigger: "already_running"
     )
-    response = client.post(
-        "/api/system/xray/sync-config", headers=auth_headers
-    )
+    response = client.post("/api/system/xray/sync-config", headers=auth_headers)
     assert response.status_code == status.HTTP_409_CONFLICT
 
 
@@ -68,9 +64,7 @@ def test_sync_xray_status(client, auth_headers, monkeypatch):
             "error_message": None,
         },
     )
-    response = client.get(
-        "/api/system/xray/sync-status", headers=auth_headers
-    )
+    response = client.get("/api/system/xray/sync-status", headers=auth_headers)
     assert response.status_code == status.HTTP_200_OK
     assert response.json()["status"] == "completed"
     assert response.json()["synced_via_api"] == 10

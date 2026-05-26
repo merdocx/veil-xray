@@ -41,9 +41,9 @@ class ConfigTaskQueue:
         self._worker_task: Optional[asyncio.Task] = None
         self._lock = asyncio.Lock()
         self._is_running = False
-        self._pending_futures: dict[str, asyncio.Future] = (
-            {}
-        )  # Словарь для ожидания результатов задач
+        self._pending_futures: dict[
+            str, asyncio.Future
+        ] = {}  # Словарь для ожидания результатов задач
 
     async def start(self):
         """Запуск воркера для обработки задач"""

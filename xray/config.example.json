@@ -49,7 +49,7 @@
             "microsoft.com",
             "www.microsoft.com"
           ],
-          "privateKey": "qPJxhnMf5TqLNBmrLkFe6mG7TOAiQFHMNMbHZF8Ji2A",
+          "privateKey": "REPLACE_WITH_xray_x25519_PRIVATE_KEY",
           "minClientVer": "",
           "maxClientVer": "",
           "maxTimeDiff": 0,
