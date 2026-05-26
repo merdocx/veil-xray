@@ -79,6 +79,16 @@ journalctl -u xray -f
 
 Код выхода скрипта: `0` — ок, `1` — предупреждение, `2` — критично (удобно для внешнего алерта). Подробнее: [docs/operations/load-protection/01-slo-draft-this-host.md](operations/load-protection/01-slo-draft-this-host.md).
 
+**Алерт при crit:** `scripts/load-protection/alert-slo-crit.sh` (cron каждые 5 мин, `logger -t veil-slo`). Настройка webhook: [09-slo-alerting.md](operations/load-protection/09-slo-alerting.md), шаблон `/etc/veil-slo-alert.env` из `slo-alert.env.example`.
+
+## Production runbook
+
+См. [docs/operations/PRODUCTION_RUNBOOK.md](operations/PRODUCTION_RUNBOOK.md) — запрет `pytest` на prod, осторожность с `sync-config` в пик.
+
+## Git deploy (SSH)
+
+[docs/operations/github-deploy.md](operations/github-deploy.md) — deploy key и `git pull` на production.
+
 ### Netdata
 
 Логи пакета: `journalctl -u netdata`. Веб-интерфейс только на **localhost:19999** (см. `bind socket to IP` в `/etc/netdata/netdata.conf`).

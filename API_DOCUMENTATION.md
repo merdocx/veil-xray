@@ -143,7 +143,7 @@ curl -X POST "https://api.your-domain.com/api/keys" \
 
 **Кодировка:** UTF-8
 
-**Версия API:** 1.3.4
+**Версия API:** 1.3.12
 
 ---
 
@@ -215,6 +215,41 @@ GET /
 
 **Коды ответа:**
 - `200 OK` - API работает
+
+#### `GET /health`
+
+Тот же ответ, что и `GET /` — для мониторинга и health-check за reverse proxy.
+
+**Запрос:**
+```bash
+GET /health
+```
+
+**Ответ:** идентичен `GET /` (`status`, `service`).
+
+---
+
+### Системные операции
+
+#### `POST /api/system/xray/sync-config`
+
+Полная синхронизация активных ключей из БД в конфиг Xray и Xray API (та же логика, что при старте сервера). **Требует Bearer-токен.** Длительная операция (~1 с на ключ при ~101 ключах).
+
+**Запрос:**
+```bash
+POST /api/system/xray/sync-config
+Authorization: Bearer YOUR_SECRET_KEY
+```
+
+**Ответ:**
+```json
+{
+  "success": true,
+  "message": "Xray config synchronization completed"
+}
+```
+
+**Рекомендация:** не вызывать в часы пиковой нагрузки на production.
 
 ---
 
@@ -564,6 +599,8 @@ Authorization: Bearer YOUR_SECRET_KEY
 | `401` | Unauthorized | Отсутствует или неверный токен авторизации |
 | `403` | Forbidden | Доступ запрещен |
 | `404` | Not Found | Ресурс не найден (ключ, endpoint) |
+| `409` | Conflict | Конфликт данных (например, дубликат UUID) |
+| `503` | Service Unavailable | БД временно недоступна (SQLite busy/timeout) — повторите запрос |
 | `500` | Internal Server Error | Ошибка сервера |
 
 ### Формат ошибок
@@ -981,6 +1018,14 @@ def get_cached_keys():
 
 ---
 
-**Версия документации:** 1.3.4  
-**Последнее обновление:** 2025-11-26
+**Версия документации:** 1.3.12  
+**Последнее обновление:** 2026-05-26
+
+### Переменные окружения (эксплуатация)
+
+| Переменная | Описание |
+|------------|----------|
+| `ENABLE_BACKGROUND_TRAFFIC_SYNC` | Фоновая синхронизация трафика (`true`/`false`) |
+| `TRAFFIC_CACHE_TTL_S` | TTL кэша трафика в секундах (по умолчанию 1800) |
+| `API_SECRET_KEY` | Bearer-токен для API |
 

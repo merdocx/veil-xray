@@ -14,7 +14,11 @@
 | 5 | [05-systemd-xray.md](05-systemd-xray.md) |
 | 6 | [06-ram-swap.md](06-ram-swap.md) |
 | 7 | [07-scaling.md](07-scaling.md) |
+| 8 | [08-capacity-decision.md](08-capacity-decision.md) — **запись решения по ёмкости** |
+| 9 | [09-slo-alerting.md](09-slo-alerting.md) — алерты при crit SLO |
 
 **Скрипты:** [scripts/load-protection/](../../../scripts/load-protection/)
+
+**Runbook:** [../PRODUCTION_RUNBOOK.md](../PRODUCTION_RUNBOOK.md) · **Git deploy:** [../github-deploy.md](../github-deploy.md)
 
 Пример `policy` с таймаутами для уровня пользователей: [xray/config.example.json](../../../xray/config.example.json).
