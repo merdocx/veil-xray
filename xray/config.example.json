@@ -154,7 +154,7 @@
     "levels": {
       "0": {
         "handshake": 60,
-        "connIdle": 1800,
+        "connIdle": 1200,
         "bufferSize": 512,
         "statsUserUplink": true,
         "statsUserDownlink": true

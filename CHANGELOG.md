@@ -2,6 +2,17 @@
 
 Все значимые изменения в проекте будут документироваться в этом файле.
 
+## [1.3.14] - 2026-05-26
+
+### Добавлено
+- Ночной рестарт Xray (`scripts/ops/cron-nightly-xray-restart.sh`, cron 04:00).
+- Отчёты baseline/SLO: `scripts/load-protection/baseline-report.sh` (daily + weekly cron).
+- `scripts/load-protection/apply-policy-connidle.sh`, `scripts/ops/install-ops-cron.sh`.
+- Baseline: метрики `fin_wait_443`, `tcp_orphan` в `monitor-baseline.sh`.
+
+### Изменено
+- `policy.connIdle` на проде: **1200** с (было 1800) для ускорения освобождения TCP.
+
 ## [1.3.13] - 2026-05-26
 
 ### Добавлено

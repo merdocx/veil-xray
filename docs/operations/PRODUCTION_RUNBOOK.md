@@ -26,6 +26,20 @@
 
 Файл: `/etc/sysctl.d/99-veil-tcp.conf` (шаблон в `scripts/load-protection/sysctl-tcp-tuning.conf`).
 
+## Плановое обслуживание (cron)
+
+Установка: `scripts/ops/install-ops-cron.sh`
+
+| Расписание | Задача |
+|------------|--------|
+| `* * * * *` | `monitor-baseline.sh` → `/var/log/veil-baseline.log` (+ `fin_wait_443`, `tcp_orphan`) |
+| `*/5 * * * *` | `check-slo.sh`, `alert-slo-crit.sh` |
+| `0 4 * * *` | Ночной рестарт Xray → `/var/log/veil-xray-restart.log` |
+| `5 6 * * *` | Отчёт за 1 день → `/var/log/veil-baseline-report.log` |
+| `10 6 * * 1` | Отчёт за 7 дней (понедельник) |
+
+**policy.connIdle:** 1200 с — `apply-policy-connidle.sh`; пересмотр через 1–2 нед по `baseline-report.sh`.
+
 ## Снижение посторонней нагрузки
 
 - **Netdata** на prod отключён (`systemctl disable netdata`) — при необходимости: `systemctl enable --now netdata`.

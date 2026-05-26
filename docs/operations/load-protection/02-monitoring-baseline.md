@@ -22,11 +22,13 @@
 
 ## Минимальный cron
 
-```cron
-* * * * * /path/to/veil-v2ray/scripts/load-protection/monitor-baseline.sh >> /var/log/veil-baseline.log 2>&1
+```bash
+/root/veil-v2ray/scripts/ops/install-ops-cron.sh
 ```
 
-Путь к скрипту замените на фактический.
+Файл `/etc/cron.d/veil-xray`: baseline, SLO, nightly Xray restart, daily/weekly `baseline-report.sh`.
+
+Отчёт вручную: `scripts/load-protection/baseline-report.sh 7`
 
 ## Продакшен (текущий хост)
 
