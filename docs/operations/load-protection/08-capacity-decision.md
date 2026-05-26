@@ -6,13 +6,13 @@
 
 | Параметр | Значение |
 |----------|----------|
-| vCPU / RAM | 1 / ~2 GiB |
-| Активных ключей | ~101 |
-| TCP :443 established (типично) | ~1700–2700+ |
-| Xray RSS | ~195–235 MiB (`MemoryMax=512M`) |
-| SLO | часто **warn/crit** по `est_443`; иногда warn по `xray_rss` |
+| vCPU / RAM | **2 / 4 GiB** (апгрейд VDSina, после перезагрузки) |
+| Активных ключей | ~100 |
+| TCP :443 established (типично) | пересмотр baseline после апгрейда |
+| Xray RSS | `MemoryMax=1G` |
+| SLO | пороги пересмотрены в `slo-thresholds.env` под 2 CPU / 4 GiB |
 
-Пороги: [slo-thresholds.env](../../../scripts/load-protection/slo-thresholds.env). Логи: `/var/log/veil-slo.log`, `/var/log/veil-baseline.log`.
+Пороги: [slo-thresholds.env](../../../scripts/load-protection/slo-thresholds.env). Эталон: [SERVER_PROFILE.md](../SERVER_PROFILE.md). Логи: `/var/log/veil-slo.log`, `/var/log/veil-baseline.log`.
 
 ## Критерии выбора варианта
 
@@ -47,9 +47,9 @@ flowchart TD
 | Поле | Значение |
 |------|----------|
 | **Дата решения** | 2026-05-26 |
-| **Выбранный вариант** | **A (тюнинг + мониторинг)** → пересмотр **B (апгрейд VPS)** через 2 нед baseline |
-| **Обоснование** | На 2026-05-26 в `/var/log/veil-slo.log`: ~725 строк, ~713 `crit` — преимущественно `est_443` выше порога при ~101 ключах; функциональных сбоев API нет. Пороги отражают фактическую нагрузку, не регрессию кода. |
-| **Срок пересмотра** | 2026-06-09 (2 нед) или при >120 активных ключах |
+| **Выбранный вариант** | **B (апгрейд VPS)** — выполнен: 2 vCPU, 4 GiB, 100 GiB, 32 TiB |
+| **Обоснование** | На старом 1 vCPU / 2 GiB — FIN-WAIT >> ESTAB, `TCP: too many orphaned sockets`, жалобы «нет интернета». Тюнинг (1.3.15) + апгрейд. |
+| **Срок пересмотра** | 2026-06-09 — baseline 7d на новом железе; при стабильном SLO второй узел не нужен до ~150–200 ключей |
 
 ## Команды для baseline перед решением
 

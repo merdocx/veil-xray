@@ -1,13 +1,15 @@
 # Операции: гуманная защита от перегрузки (один сервер, один Xray)
 
-Общая сводка по сервисам, логам и автозапуску: [../../OPERATIONS.md](../../OPERATIONS.md).
+Общая сводка: [../../OPERATIONS.md](../../OPERATIONS.md).
+
+**Актуальные лимиты prod (2 vCPU / 4 GiB):** [../SERVER_PROFILE.md](../SERVER_PROFILE.md).
 
 Пошаговые материалы:
 
 | Шаг | Документ |
 |-----|----------|
 | 1 | [01-slo-template.md](01-slo-template.md) — пустой шаблон |
-| 1b | [01-slo-draft-this-host.md](01-slo-draft-this-host.md) — **черновые пороги по факту baseline с прод-сервера** |
+| 1b | [01-slo-draft-this-host.md](01-slo-draft-this-host.md) — **история:** 1 vCPU / 2 GiB (до апгрейда 2026-05-26) |
 | 2 | [02-monitoring-baseline.md](02-monitoring-baseline.md) |
 | 3 | [03-xray-policy.md](03-xray-policy.md) |
 | 4 | [04-reject-new-connections.md](04-reject-new-connections.md) |

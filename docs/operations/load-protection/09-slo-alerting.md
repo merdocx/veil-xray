@@ -1,37 +1,50 @@
-# SLO alerting (crit)
+# SLO alerting (crit и FIN-WAIT)
+
+Актуальные пороги: [slo-thresholds.env](../../../scripts/load-protection/slo-thresholds.env), таблица — [SERVER_PROFILE.md](../SERVER_PROFILE.md#6-slo-и-пороги).
 
 ## Компоненты
 
 | Файл | Назначение |
 |------|------------|
-| `scripts/load-protection/check-slo.sh` | Метрики → `/var/log/veil-slo.log`, exit `2` = crit |
-| `scripts/load-protection/alert-slo-crit.sh` | `logger` + опционально webhook/email |
-| `scripts/load-protection/slo-alert.env.example` | Шаблон `/etc/veil-slo-alert.env` |
+| `check-slo.sh` | Метрики → `/var/log/veil-slo.log`, exit `2` = crit |
+| `alert-slo-crit.sh` | Любой crit → `logger` + webhook |
+| `alert-tcp-pressure.sh` | Crit с `fin_wait` / `fin_wait_ratio` в reasons |
+| `slo-alert.env.example` | Шаблон `/etc/veil-slo-alert.env` |
 
-## Установка cron (root)
+## Cron (prod)
 
-```cron
-*/5 * * * * /root/veil-v2ray/scripts/load-protection/check-slo.sh
-*/5 * * * * /root/veil-v2ray/scripts/load-protection/alert-slo-crit.sh
+Установка одной командой:
+
+```bash
+/root/veil-v2ray/scripts/ops/install-ops-cron.sh
 ```
+
+В `/etc/cron.d/veil-xray` (каждые 5 мин):
+
+- `check-slo.sh`
+- `alert-slo-crit.sh`
+- `alert-tcp-pressure.sh`
+- `auto-restart-xray-on-tcp.sh` (рестарт Xray при устойчивом FIN-WAIT, max 1×/ч)
 
 Проверка:
 
 ```bash
 /root/veil-v2ray/scripts/load-protection/check-slo.sh; echo check_exit=$?
+tail -1 /var/log/veil-slo.log
 journalctl -t veil-slo --since "10 min ago" --no-pager
+journalctl -t veil-tcp --since "10 min ago" --no-pager
 ```
 
-## Опциональный webhook
+## Webhook
 
 ```bash
 sudo cp /root/veil-v2ray/scripts/load-protection/slo-alert.env.example /etc/veil-slo-alert.env
 sudo chmod 600 /etc/veil-slo-alert.env
-# отредактировать SLO_ALERT_WEBHOOK_URL
+# SLO_ALERT_WEBHOOK_URL=https://...
 ```
 
-Дедупликация: повтор алерта не чаще **30 минут** при непрерывном crit (`/var/lib/veil-slo-alert.state`).
+Дедупликация: повтор не чаще **30 мин** (`SLO_ALERT_REPEAT_MIN`, state в `/var/lib/veil-slo-alert.state` и `/var/lib/veil-tcp-alert.state`).
 
-## Baseline перед сменой порогов
+## Пересмотр порогов
 
-1–2 недели не менять `slo-thresholds.env` без анализа `/var/log/veil-baseline.log` и доли `crit` в `veil-slo.log` (см. [08-capacity-decision.md](08-capacity-decision.md)).
+1–2 недели baseline на **новом железе** (2 CPU / 4 GiB) перед изменением чисел — см. [08-capacity-decision.md](08-capacity-decision.md) (пересмотр **2026-06-09**).

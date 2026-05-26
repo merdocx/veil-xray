@@ -1,14 +1,23 @@
 # Скрипты: защита от перегрузки
 
+**Пороги и cron для текущего prod:** [docs/operations/SERVER_PROFILE.md](../../docs/operations/SERVER_PROFILE.md).
+
 | Скрипт | Назначение |
 |--------|------------|
-| `slo-thresholds.env` | Числовые пороги SLO (load, RAM, RSS xray, TCP :443) |
-| `check-slo.sh` | Сравнение с порогами → `/var/log/veil-slo.log` (cron раз в 5 мин) |
-| `alert-slo-crit.sh` | Алерт в syslog (+ webhook) при exit 2 от check-slo |
+| `slo-thresholds.env` | Пороги SLO (2 vCPU / 4 GiB, ~100 ключей) |
+| `check-slo.sh` | Сравнение с порогами → `/var/log/veil-slo.log` (5 мин) |
+| `alert-slo-crit.sh` | Алерт при любом crit |
+| `alert-tcp-pressure.sh` | Алерт при crit по FIN-WAIT |
 | `slo-alert.env.example` | Шаблон `/etc/veil-slo-alert.env` |
-| `monitor-baseline.sh` | Лог метрик раз в минуту (cron), шаг 2 |
-| `stress-mode-nft.sh` | Опционально: DROP новых TCP на порт Xray, шаг 4 |
-| `check-ram-swap.sh` | Краткий аудит RAM/swap, шаг 6 |
-| `systemd/xray.service.d-override.conf.example` | Пример лимитов для юнита Xray, шаг 5 |
+| `monitor-baseline.sh` | Метрики раз в минуту → `veil-baseline.log` |
+| `baseline-report.sh` | Отчёт за N дней из baseline |
+| `apply-policy-connidle.sh` | Установить `connIdle` в prod config |
+| `sysctl-tcp-tuning.conf` | Шаблон `/etc/sysctl.d/99-veil-tcp.conf` |
+| `logrotate-veil-ops.example` | Ротация `/var/log/veil-*.log` |
+| `stress-mode-nft.sh` | Аварийный DROP новых TCP :443 |
+| `check-ram-swap.sh` | Аудит RAM/swap |
+| `systemd/xray.service.d-override.conf.example` | `MemoryMax=1G` |
+
+**Ops (cron):** [../ops/install-ops-cron.sh](../ops/install-ops-cron.sh), [../ops/auto-restart-xray-on-tcp.sh](../ops/auto-restart-xray-on-tcp.sh), [../ops/cron-nightly-xray-restart.sh](../ops/cron-nightly-xray-restart.sh).
 
 Документация: [docs/operations/load-protection/](../../docs/operations/load-protection/README.md).

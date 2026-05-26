@@ -1,133 +1,111 @@
 # Эксплуатация: сервисы, логи, автозапуск, мониторинг
 
-Сводка для продакшена на типичном хосте с путём проекта `/root/veil-v2ray`. Подставьте свой путь при другой установке.
+Сводка для продакшена. Путь проекта: `/root/veil-v2ray`.
+
+**Эталон всех лимитов и примеров `.env` / SLO / sysctl:** [operations/SERVER_PROFILE.md](operations/SERVER_PROFILE.md) (2 vCPU, 4 GiB, v1.3.15).
 
 ## Автозапуск (systemd)
 
-| Юнит | Назначение | Обычное состояние |
-|------|------------|-------------------|
-| `xray.service` | Xray (VLESS+Reality), `/usr/local/bin/xray run -config /usr/local/etc/xray/config.json` | `enabled` |
-| `veil-xray-api.service` | FastAPI через uvicorn на `127.0.0.1:8000` | `enabled` |
-| `nginx.service` | Reverse proxy и TLS для API | `enabled` |
-| `netdata.service` | Мониторинг хоста (веб на `127.0.0.1:19999`) | `enabled` (если установлен) |
-
-Проверка:
+| Юнит | Назначение | Prod |
+|------|------------|------|
+| `xray.service` | Xray VLESS+Reality, config `/usr/local/etc/xray/config.json` | enabled |
+| `veil-xray-api.service` | FastAPI `127.0.0.1:8000` | enabled |
+| `nginx.service` | TLS reverse proxy для API | enabled |
+| `wg-quick@wg0` | WireGuard egress (NL) | enabled |
+| `netdata.service` | Мониторинг (localhost:19999) | **disabled** на prod |
 
 ```bash
-systemctl is-enabled xray veil-xray-api nginx netdata 2>/dev/null
+systemctl is-enabled xray veil-xray-api nginx wg-quick@wg0
 systemctl status xray veil-xray-api nginx --no-pager
 ```
 
-Юнит-файлы в репозитории (шаблоны): [scripts/veil-xray-api.service](../scripts/veil-xray-api.service), [scripts/xray.service](../scripts/xray.service). На сервере актуальные копии лежат в `/etc/systemd/system/`.
+Юниты в репозитории: [scripts/veil-xray-api.service](../scripts/veil-xray-api.service), [scripts/xray.service](../scripts/xray.service).  
+Лимит Xray: `MemoryMax=1G` — см. [SERVER_PROFILE.md](operations/SERVER_PROFILE.md).
+
+## Cron (ops)
+
+Расписание в **`/etc/cron.d/veil-xray`** (не дублировать в root crontab). Установка:
+
+```bash
+/root/veil-v2ray/scripts/ops/install-ops-cron.sh
+```
+
+Задачи: baseline (1 мин), SLO + алерты (5 мин), ночной рестарт Xray (04:00), отчёты baseline, бэкап БД (02:00). Таблица — в [SERVER_PROFILE.md](operations/SERVER_PROFILE.md).
 
 ## Логирование
 
-### API (Veil Xray)
+### API
 
 | Что | Где |
 |-----|-----|
-| Файл приложения | `{PROJECT_ROOT}/logs/veil_xray_api.log` (по умолчанию `./logs/...` относительно рабочей директории сервиса) |
-| Ротация в приложении | `RotatingFileHandler`: **10 MB** на файл, **5** архивов (`log_max_bytes`, `log_backup_count` в `.env` / [config/settings.py](../config/settings.py)) |
-| Journal systemd | `StandardOutput=journal`, `StandardError=journal` — дублирование в журнал |
+| Файл | `/root/veil-v2ray/logs/veil_xray_api.log` |
+| Ротация | Python: **10 MB** × **5** (`log_max_bytes`, `log_backup_count`) |
+| Journal | `journalctl -u veil-xray-api -f` |
 
-Просмотр:
-
-```bash
-tail -f /root/veil-v2ray/logs/veil_xray_api.log
-journalctl -u veil-xray-api -f
-```
-
-Health-check API: `GET /` или `GET /health` (через Nginx — `GET /health` проксируется на корень приложения). **Не запускайте `pytest` на проде** — тесты пишут в отдельный лог (`LOG_FILE` в conftest) и используют временную БД.
-
-**Logrotate для `veil_xray_api.log` не используется:** ротацию делает **Python** (`RotatingFileHandler`: текущий файл + `.1` … `.5`, по ~10 MB). Проверка: `ls -la /root/veil-v2ray/logs/veil_xray_api.log*`. Дублирующий `logrotate` для того же файла может мешать — не включайте без необходимости.
-
-### Nginx (прокси к API)
-
-| Что | Где (типично) |
-|-----|----------------|
-| Access | `/var/log/nginx/veil-xray-api-access.log` |
-| Error | `/var/log/nginx/veil-xray-api-error.log` |
-
-Ротация: системный `/etc/logrotate.d/nginx` (шаблон `/var/log/nginx/*.log`).
+**Не запускайте `pytest` на prod** — см. [PRODUCTION_RUNBOOK.md](operations/PRODUCTION_RUNBOOK.md).
 
 ### Xray
-
-Вывод процесса при работе через systemd попадает в **journal**:
 
 ```bash
 journalctl -u xray -f
 ```
 
-Уровень и путь при необходимости задаются в `/usr/local/etc/xray/config.json` (`log`).
+### Мониторинг нагрузки
 
-### Мониторинг нагрузки (baseline)
+| Лог | Скрипт | Частота |
+|-----|--------|---------|
+| `/var/log/veil-baseline.log` | `monitor-baseline.sh` | 1 мин |
+| `/var/log/veil-slo.log` | `check-slo.sh` | 5 мин |
+| `/var/log/veil-baseline-report.log` | `baseline-report.sh` | 06:05 / пн |
+| `/var/log/veil-xray-restart.log` | ночной рестарт | 04:00 |
+| `/var/log/veil-xray-tcp-restart.log` | auto-restart TCP | при срабатывании |
 
-| Что | Где |
-|-----|-----|
-| Метрики раз в минуту | `/var/log/veil-baseline.log` |
-| Cron | root: `monitor-baseline.sh` из [scripts/load-protection/](../scripts/load-protection/) |
+Ротация ops: `/etc/logrotate.d/veil-ops` (шаблон `scripts/load-protection/logrotate-veil-ops.example`).
 
-Ротация: `/etc/logrotate.d/veil-baseline` (еженедельно, 8 файлов).
+### Nginx
 
-### Проверка порогов SLO
+`/var/log/nginx/veil-xray-api-access.log`, `veil-xray-api-error.log` — системный logrotate.
 
-| Что | Где |
-|-----|-----|
-| Пороги | `scripts/load-protection/slo-thresholds.env` |
-| Скрипт (cron **каждые 5 мин**) | `scripts/load-protection/check-slo.sh` |
-| Лог | `/var/log/veil-slo.log` (ротация: `/etc/logrotate.d/veil-slo`) |
+## SLO и алерты
 
-Код выхода скрипта: `0` — ок, `1` — предупреждение, `2` — критично (удобно для внешнего алерта). Подробнее: [docs/operations/load-protection/01-slo-draft-this-host.md](operations/load-protection/01-slo-draft-this-host.md).
+Пороги: [scripts/load-protection/slo-thresholds.env](../scripts/load-protection/slo-thresholds.env) (под **2 CPU / 4 GiB**).
 
-**Алерт при crit:** `scripts/load-protection/alert-slo-crit.sh` (cron каждые 5 мин, `logger -t veil-slo`). Настройка webhook: [09-slo-alerting.md](operations/load-protection/09-slo-alerting.md), шаблон `/etc/veil-slo-alert.env` из `slo-alert.env.example`.
+| Скрипт | Назначение |
+|--------|------------|
+| `check-slo.sh` | exit 0/1/2 → warn/crit |
+| `alert-slo-crit.sh` | syslog + webhook при crit |
+| `alert-tcp-pressure.sh` | crit по FIN-WAIT |
+
+Настройка webhook: [operations/load-protection/09-slo-alerting.md](operations/load-protection/09-slo-alerting.md).
+
+Черновик порогов для **старого** 1 vCPU / 2 GiB (история): [01-slo-draft-this-host.md](operations/load-protection/01-slo-draft-this-host.md).
 
 ## Production runbook
 
-См. [docs/operations/PRODUCTION_RUNBOOK.md](operations/PRODUCTION_RUNBOOK.md) — запрет `pytest` на prod, осторожность с `sync-config` в пик.
+[operations/PRODUCTION_RUNBOOK.md](operations/PRODUCTION_RUNBOOK.md)
 
-## Git deploy (SSH)
+## Git deploy
 
-[docs/operations/github-deploy.md](operations/github-deploy.md) — deploy key и `git pull` на production.
-
-### Netdata
-
-Логи пакета: `journalctl -u netdata`. Веб-интерфейс только на **localhost:19999** (см. `bind socket to IP` в `/etc/netdata/netdata.conf`).
+[operations/github-deploy.md](operations/github-deploy.md)
 
 ## Резервное копирование БД
 
-Скрипт: [scripts/backup_database.sh](../scripts/backup_database.sh) — кладёт сжатые копии в `{PROJECT_ROOT}/backups/`, удаляет файлы старше 30 дней.
+[scripts/backup_database.sh](../scripts/backup_database.sh) → `backups/`, cron **02:00**. Подробнее: [scripts/BACKUP_AND_LOGGING.md](../scripts/BACKUP_AND_LOGGING.md).
 
-**Расписание (root `crontab`):** ежедневно в **02:00**, лог: `{PROJECT_ROOT}/logs/backup.log`.
+## Netdata (опционально)
 
-**Ротация `backup.log`:** `/etc/logrotate.d/veil-v2ray-backup-log` — раз в месяц, 12 архивов, `copytruncate`.
-
-Тот же блок cron для другого хоста:
-
-```cron
-0 2 * * * /root/veil-v2ray/scripts/backup_database.sh >> /root/veil-v2ray/logs/backup.log 2>&1
-```
-
-Подробнее: [scripts/BACKUP_AND_LOGGING.md](../scripts/BACKUP_AND_LOGGING.md).
-
-### Проверка на сервере
-
-```bash
-crontab -l | grep backup_database
-ls -la /root/veil-v2ray/backups/
-tail -20 /root/veil-v2ray/logs/backup.log
-```
+На prod **отключён** для экономии RAM. Включение: `systemctl enable --now netdata`, доступ `ssh -L 19999:127.0.0.1:19999 root@<host>`. См. [02-monitoring-baseline.md](operations/load-protection/02-monitoring-baseline.md).
 
 ## Мониторинг и защита от перегрузки
 
-- Базовая линия и Netdata: [docs/operations/load-protection/02-monitoring-baseline.md](operations/load-protection/02-monitoring-baseline.md)
-- Остальные шаги: [docs/operations/load-protection/README.md](operations/load-protection/README.md)
+- [operations/load-protection/README.md](operations/load-protection/README.md) — индекс шагов
+- [operations/load-protection/08-capacity-decision.md](operations/load-protection/08-capacity-decision.md) — решение по ёмкости
 
 ## Быстрая проверка здоровья
 
 ```bash
 /usr/local/bin/xray -test -config /usr/local/etc/xray/config.json
-curl -sS http://127.0.0.1:8000/
-systemctl is-active xray veil-xray-api nginx
+curl -sS http://127.0.0.1:8000/health
+systemctl is-active xray veil-xray-api nginx wg-quick@wg0
+tail -1 /var/log/veil-slo.log
 ```
-
-HTTPS API (если настроен): `curl -sS https://<ваш API хост>/`.

@@ -1,5 +1,9 @@
 ## [1.3.15] - 2026-05-26
 
+### Документация
+- [docs/operations/SERVER_PROFILE.md](docs/operations/SERVER_PROFILE.md) — эталон лимитов prod (2 vCPU / 4 GiB)
+- Обновлены OPERATIONS, runbook, load-protection, `.env.example`, API_DOCUMENTATION
+
 ### Стабильность VPN / ops
 - FIN-WAIT в `check-slo.sh`, `alert-tcp-pressure.sh`, пороги в `slo-thresholds.env`
 - `bulk_sync_vless_clients`: один `save_config` при sync (вместо 101)

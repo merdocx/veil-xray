@@ -8,7 +8,8 @@
 | [../HTTPS_SETUP.md](../HTTPS_SETUP.md) | HTTPS и Nginx |
 | [../TZ.md](../TZ.md) | Техническое задание (если есть) |
 | [../CHANGELOG.md](../CHANGELOG.md) | История изменений |
-| [operations/load-protection/](operations/load-protection/) | SLO, Netdata, policy Xray, systemd, stress-mode |
+| [operations/SERVER_PROFILE.md](operations/SERVER_PROFILE.md) | **Эталон лимитов и настроек prod (2 vCPU / 4 GiB)** |
+| [operations/load-protection/](operations/load-protection/) | SLO, baseline, policy Xray, systemd, stress-mode |
 | [operations/routing-split-ru-restore.md](operations/routing-split-ru-restore.md) | Восстановление split RU/foreign после режима «всё через relay» |
 | [operations/routing-all-via-relay.md](operations/routing-all-via-relay.md) | Аудит: весь трафик через релей и допустимые исключения |
 | [../scripts/BACKUP_AND_LOGGING.md](../scripts/BACKUP_AND_LOGGING.md) | Бэкапы SQLite и логирование API |

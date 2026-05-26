@@ -1,6 +1,6 @@
 [Service]
-# См. docs/operations/load-protection/01-slo-draft-this-host.md — на проде задано MemoryMax=512M
-MemoryMax=512M
+# 4 GiB host: 1G для Xray; 2 GiB host — 512M
+MemoryMax=1G
 # Optional: cap CPU if xray starves SSH/monitoring on small VPS
 # CPUQuota=80%
 

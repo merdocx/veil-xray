@@ -1,6 +1,8 @@
 # Production runbook (veil-xray)
 
-Краткие правила эксплуатации production-узла. Подробнее: [OPERATIONS.md](../OPERATIONS.md), [load-protection/](load-protection/).
+Краткие правила эксплуатации production-узла. **Лимиты и примеры .env:** [SERVER_PROFILE.md](SERVER_PROFILE.md). Подробнее: [OPERATIONS.md](../OPERATIONS.md), [load-protection/](load-protection/).
+
+**Текущий узел:** 2 vCPU / 4 GiB · ~100 ключей · veil-xray **1.3.15**.
 
 ## Запрещено на production
 
@@ -24,7 +26,7 @@
 
 ## TCP tuning (применено на хосте)
 
-Файл: `/etc/sysctl.d/99-veil-tcp.conf` (шаблон в `scripts/load-protection/sysctl-tcp-tuning.conf`).
+Файл: `/etc/sysctl.d/99-veil-tcp.conf` (шаблон в `scripts/load-protection/sysctl-tcp-tuning.conf`), в т.ч. `tcp_max_orphans=16384`. Таблица параметров: [SERVER_PROFILE.md](SERVER_PROFILE.md#5-sysctl-tcp).
 
 ## Плановое обслуживание (cron)
 
@@ -72,10 +74,10 @@ cd /root/veil-v2ray && git pull --ff-only origin main
 
 1. `tail -20 /var/log/veil-slo.log` — какая метрика (TCP, xray_rss, MemAvail, load)
 2. [08-capacity-decision.md](load-protection/08-capacity-decision.md) — матрица решений
-3. При устойчивом crit > 1–2 нед — апгрейд VPS или второй узел ([07-scaling.md](load-protection/07-scaling.md))
+3. Сверить с [SERVER_PROFILE.md](SERVER_PROFILE.md) и [08-capacity-decision.md](load-protection/08-capacity-decision.md); при устойчивом crit — второй узел ([07-scaling.md](load-protection/07-scaling.md)) или тюнинг policy/TCP
 
 ## Мониторинг
 
 - Baseline: `/var/log/veil-baseline.log` (каждую минуту)
 - SLO: `/var/log/veil-slo.log` (каждые 5 мин)
-- Алерт crit: `alert-slo-crit.sh` + опционально `/etc/veil-slo-alert.env`
+- Алерт crit: `alert-slo-crit.sh`, FIN-WAIT: `alert-tcp-pressure.sh` + `/etc/veil-slo-alert.env`

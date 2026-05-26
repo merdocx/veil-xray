@@ -30,14 +30,14 @@
 
 Отчёт вручную: `scripts/load-protection/baseline-report.sh 7`
 
-## Продакшен (текущий хост)
+## Продакшен (текущий хост, 2 vCPU / 4 GiB)
 
-Полный перечень юнитов и путей к логам: [../../OPERATIONS.md](../../OPERATIONS.md).
-
-На сервере с репозиторием в `/root/veil-v2ray` дополнительно настроено:
+Эталон метрик и cron: [../SERVER_PROFILE.md](../SERVER_PROFILE.md). Сводка: [../../OPERATIONS.md](../../OPERATIONS.md).
 
 | Компонент | Состояние |
 |-----------|-----------|
-| **Netdata** | Установлен из пакета Ubuntu; веб **только на `127.0.0.1:19999`** (не торчит в интернет). Доступ с ноутбука: `ssh -L 19999:127.0.0.1:19999 root@<IP>` → браузер `http://127.0.0.1:19999`. В **Applications** процесс **xray** попадает в группу **vpn** (`/etc/netdata/apps_groups.conf`). |
-| **Baseline cron** | Root crontab: раз в минуту `monitor-baseline.sh` → **`/var/log/veil-baseline.log`**. |
-| **Ротация лога** | `/etc/logrotate.d/veil-baseline` (еженедельно, 8 архивов). |
+| **Baseline** | `/etc/cron.d/veil-xray` → `monitor-baseline.sh` → `/var/log/veil-baseline.log` (1 мин). Поля: `est_tcp_sport_443`, `fin_wait_443`, `tcp_orphan`, `xray_rss_kb`, … |
+| **SLO** | `check-slo.sh` каждые 5 мин → `/var/log/veil-slo.log` |
+| **Отчёты** | `baseline-report.sh 1` (06:05), `7` (пн 06:10) |
+| **Ротация** | `/etc/logrotate.d/veil-ops` (slo, baseline, restart-логи) |
+| **Netdata** | **Отключён** на prod (`systemctl disable netdata`) — опционально: `enable`, доступ `ssh -L 19999:127.0.0.1:19999 root@<IP>` |

@@ -1,4 +1,6 @@
-# Черновые пороги SLO (этот хост)
+# Черновые пороги SLO (исторический снимок)
+
+> **Устарело для эксплуатации.** С 2026-05-26 prod: **2 vCPU / 4 GiB**. Актуальные пороги: [slo-thresholds.env](../../../scripts/load-protection/slo-thresholds.env) и [SERVER_PROFILE.md](../SERVER_PROFILE.md).
 
 Сгенерировано по **`/var/log/veil-baseline.log`**: **1535** минутных точек (примерно с 2026-04-06 19:16 до 2026-04-07 20:50), **1 vCPU**, **~2 ГБ RAM**, swap **0**.
 
