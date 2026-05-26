@@ -274,7 +274,9 @@ def test_bulk_sync_vless_clients(config_manager, sample_config):
         ("uuid-b", "b@x"),
     ]
     with patch.object(config_manager, "save_config", return_value=True) as mock_save:
-        result = config_manager.bulk_sync_vless_clients(users, validate=False, test=False)
+        result = config_manager.bulk_sync_vless_clients(
+            users, validate=False, test=False
+        )
     assert result["saved"] is True
     assert result["added"] == 2
     assert mock_save.call_count == 1

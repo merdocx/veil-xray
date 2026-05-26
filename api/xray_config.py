@@ -168,7 +168,6 @@ class XrayConfigManager:
             logger.error(f"❌ Error saving Xray config: {e}")
             return False
 
-
     def _get_vless_inbound(self, config: dict) -> Optional[dict]:
         for inbound in config.get("inbounds", []):
             if inbound.get("protocol") == "vless":
@@ -200,9 +199,7 @@ class XrayConfigManager:
             return False
         if not email:
             email = f"user_{uuid[:8]}"
-        clients.append(
-            {"id": uuid, "flow": settings.reality_flow, "email": email}
-        )
+        clients.append({"id": uuid, "flow": settings.reality_flow, "email": email})
         vless_inbound["settings"]["clients"] = clients
         return True
 

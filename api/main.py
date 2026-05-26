@@ -452,9 +452,7 @@ async def sync_users_with_xray() -> dict[str, int]:
         skipped_count = 0
         error_count = 0
 
-        users_for_config = [
-            (key.uuid, f"user_{key.id}_{key.uuid[:8]}") for key in keys
-        ]
+        users_for_config = [(key.uuid, f"user_{key.id}_{key.uuid[:8]}") for key in keys]
         try:
             bulk = xray_config_manager.bulk_sync_vless_clients(users_for_config)
             if bulk.get("saved"):
