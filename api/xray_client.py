@@ -296,6 +296,7 @@ class XrayClient:
         try:
             # Выполняем CLI команду для удаления пользователя
             server = f"{settings.xray_api_host}:{settings.xray_api_port}"
+
             async def _rmu(tag: str) -> subprocess.CompletedProcess:
                 cmd = [
                     "/usr/local/bin/xray",

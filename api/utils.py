@@ -94,6 +94,7 @@ def build_vless_link(
         remark=dest,
     )
 
+
 def build_vless_link_with_transport(
     *,
     uuid: str,
@@ -174,7 +175,9 @@ def build_trojan_reality_link(
         "sid": short_id,
     }
     query_params = "&".join([f"{k}={v}" for k, v in params.items()])
-    return f"trojan://{password}@{server_address}:{port}" f"?{query_params}" f"#{remark}"
+    return (
+        f"trojan://{password}@{server_address}:{port}" f"?{query_params}" f"#{remark}"
+    )
 
 
 def parse_key_identifier(identifier: str) -> Tuple[Optional[str], Optional[int], bool]:

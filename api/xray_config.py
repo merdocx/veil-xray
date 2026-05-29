@@ -259,7 +259,8 @@ class XrayConfigManager:
                 any_present = False
                 for inbound in vless_inbounds:
                     use_flow = (
-                        inbound.get("tag") != settings.xray_vless_reality_happ_inbound_tag
+                        inbound.get("tag")
+                        != settings.xray_vless_reality_happ_inbound_tag
                     )
                     if self._add_client_in_config(
                         inbound, uuid, email, use_flow=use_flow
@@ -350,12 +351,12 @@ class XrayConfigManager:
                 use_flow = (
                     inbound.get("tag") != settings.xray_vless_reality_happ_inbound_tag
                 )
-                if self._add_client_in_config(
-                    inbound, uuid, email, use_flow=use_flow
-                ):
+                if self._add_client_in_config(inbound, uuid, email, use_flow=use_flow):
                     added_any = True
             if added_any:
-                logger.info(f"Added user {uuid[:8]}... to Xray config (all VLESS inbounds)")
+                logger.info(
+                    f"Added user {uuid[:8]}... to Xray config (all VLESS inbounds)"
+                )
             else:
                 logger.info(f"User {uuid[:8]}... already exists in VLESS inbounds")
 
@@ -412,7 +413,9 @@ class XrayConfigManager:
                     removed_any = True
 
             if removed_any:
-                logger.info(f"Removed user {uuid[:8]}... from Xray config (all VLESS inbounds)")
+                logger.info(
+                    f"Removed user {uuid[:8]}... from Xray config (all VLESS inbounds)"
+                )
 
             # НЕ удаляем Short ID из realitySettings - используем общий short_id для всех
             # Общий short_id остается в конфигурации для других пользователей

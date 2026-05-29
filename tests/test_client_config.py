@@ -16,9 +16,7 @@ def test_build_client_config_four_outbounds(monkeypatch):
     )
 
     proxy_tags = [
-        o["tag"]
-        for o in cfg["outbounds"]
-        if o.get("protocol") in ("vless", "trojan")
+        o["tag"] for o in cfg["outbounds"] if o.get("protocol") in ("vless", "trojan")
     ]
     assert "fast_vless_tcp" in proxy_tags
     assert "fast_vless_tcp_alt" in proxy_tags
@@ -51,9 +49,7 @@ def test_build_client_config_includes_sni_b(monkeypatch):
     )
 
     proxy_tags = [
-        o["tag"]
-        for o in cfg["outbounds"]
-        if o.get("protocol") in ("vless", "trojan")
+        o["tag"] for o in cfg["outbounds"] if o.get("protocol") in ("vless", "trojan")
     ]
     assert "fast_vless_tcp_sni_b" in proxy_tags
     assert len(proxy_tags) == 5
