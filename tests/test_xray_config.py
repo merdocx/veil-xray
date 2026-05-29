@@ -7,20 +7,33 @@ import os
 from pathlib import Path
 from unittest.mock import patch, mock_open, MagicMock
 from api.xray_config import XrayConfigManager
+from config.settings import settings
+
+
+def _minimal_vless_inbound(tag: str) -> dict:
+    return {
+        "tag": tag,
+        "protocol": "vless",
+        "settings": {"clients": [], "decryption": "none"},
+        "streamSettings": {"realitySettings": {"shortIds": []}},
+    }
+
+
+def _minimal_trojan_inbound() -> dict:
+    return {
+        "tag": settings.xray_trojan_reality_inbound_tag,
+        "protocol": "trojan",
+        "settings": {"clients": []},
+        "streamSettings": {"realitySettings": {"shortIds": []}},
+    }
 
 
 @pytest.fixture
 def sample_config():
-    """Пример конфигурации Xray"""
-    return {
-        "inbounds": [
-            {
-                "protocol": "vless",
-                "settings": {"clients": []},
-                "streamSettings": {"realitySettings": {"shortIds": []}},
-            }
-        ]
-    }
+    """Минимальный config.json с тегами inbounds как в settings / prod."""
+    inbounds = [_minimal_vless_inbound(tag) for tag in settings.vless_inbound_tags()]
+    inbounds.append(_minimal_trojan_inbound())
+    return {"inbounds": inbounds, "outbounds": []}
 
 
 @pytest.fixture
@@ -172,15 +185,14 @@ def test_add_user_to_config(config_manager, sample_config):
     )
     assert result is True
 
-    # Проверяем, что пользователь добавлен
     config = config_manager.load_config()
-    vless_inbound = next(i for i in config["inbounds"] if i["protocol"] == "vless")
-    clients = vless_inbound["settings"]["clients"]
+    primary = config_manager._get_inbound_by_tag(
+        config, settings.xray_vless_reality_inbound_tag
+    )
+    assert primary is not None
+    clients = primary["settings"]["clients"]
     assert any(c["id"] == "test-uuid-123" for c in clients)
-
-    # Проверяем, что общий short_id присутствует в конфигурации
-    # (теперь используется общий short_id для всех пользователей)
-    short_ids = vless_inbound["streamSettings"]["realitySettings"]["shortIds"]
+    short_ids = primary["streamSettings"]["realitySettings"]["shortIds"]
     assert settings.reality_common_short_id in short_ids
 
 
@@ -211,15 +223,12 @@ def test_remove_user_from_config(config_manager, sample_config):
     )
     assert result is True
 
-    # Проверяем, что пользователь удален
     config = config_manager.load_config()
-    vless_inbound = next(i for i in config["inbounds"] if i["protocol"] == "vless")
-    clients = vless_inbound["settings"]["clients"]
-    assert not any(c["id"] == "test-uuid-123" for c in clients)
-
-    # Проверяем, что short_id удален
-    short_ids = vless_inbound["streamSettings"]["realitySettings"]["shortIds"]
-    assert "abcd1234" not in short_ids
+    for tag in settings.vless_inbound_tags():
+        inbound = config_manager._get_inbound_by_tag(config, tag)
+        assert inbound is not None
+        clients = inbound["settings"]["clients"]
+        assert not any(c["id"] == "test-uuid-123" for c in clients)
 
 
 def test_remove_user_not_found(config_manager, sample_config):
