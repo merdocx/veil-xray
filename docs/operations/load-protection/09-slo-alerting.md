@@ -16,7 +16,7 @@
 Установка одной командой:
 
 ```bash
-/root/veil-v2ray/scripts/ops/install-ops-cron.sh
+/root/veil-xray/scripts/ops/install-ops-cron.sh
 ```
 
 В `/etc/cron.d/veil-xray` (каждые 5 мин):
@@ -29,7 +29,7 @@
 Проверка:
 
 ```bash
-/root/veil-v2ray/scripts/load-protection/check-slo.sh; echo check_exit=$?
+/root/veil-xray/scripts/load-protection/check-slo.sh; echo check_exit=$?
 tail -1 /var/log/veil-slo.log
 journalctl -t veil-slo --since "10 min ago" --no-pager
 journalctl -t veil-tcp --since "10 min ago" --no-pager
@@ -38,7 +38,7 @@ journalctl -t veil-tcp --since "10 min ago" --no-pager
 ## Webhook
 
 ```bash
-sudo cp /root/veil-v2ray/scripts/load-protection/slo-alert.env.example /etc/veil-slo-alert.env
+sudo cp /root/veil-xray/scripts/load-protection/slo-alert.env.example /etc/veil-slo-alert.env
 sudo chmod 600 /etc/veil-slo-alert.env
 # SLO_ALERT_WEBHOOK_URL=https://...
 ```

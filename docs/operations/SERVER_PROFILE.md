@@ -1,6 +1,6 @@
 # Профиль production-сервера (эталон настроек)
 
-**Актуально на:** 2026-05-26 · **Версия veil-xray:** 1.3.17 · **Хост:** v3091624 (VDSina)
+**Актуально на:** 2026-05-26 · **Версия veil-xray:** 1.3.18 · **Хост:** v3091624 (VDSina)
 
 Этот документ — **единый справочник** лимитов и примеров конфигурации для текущего узла. При смене тарифа, порогов или policy обновляйте его вместе с `scripts/load-protection/slo-thresholds.env` и [08-capacity-decision.md](load-protection/08-capacity-decision.md).
 
@@ -16,9 +16,9 @@
 | Трафик (лимит хостера) | 32 TiB / период |
 | Публичный IP (вход VPN) | `193.124.65.182` |
 | Активных ключей | ~**100** |
-| Путь проекта | `/root/veil-v2ray` |
+| Путь проекта | `/root/veil-xray` |
 
-**История:** до 2026-05-26 — 1 vCPU / 2 GiB (см. [01-slo-draft-this-host.md](load-protection/01-slo-draft-this-host.md) — **устаревшие пороги**, только для сравнения).
+**История:** до 2026-05-26 — 1 vCPU / 2 GiB (пороги SLO в CHANGELOG; актуальные — в [01-slo-template.md](load-protection/01-slo-template.md)).
 
 ---
 
@@ -29,7 +29,7 @@
 | `xray.service` | enabled, active | VLESS+Reality :443 |
 | `veil-xray-api.service` | enabled, active | `127.0.0.1:8000` |
 | `nginx.service` | enabled, active | TLS → API |
-| `wg-quick@wg0` | enabled, active | Egress NL |
+| `wg-quick@wg0` | enabled, active | Egress через релей (WG) |
 | `netdata.service` | **disabled** | Освобождение RAM; опционально |
 
 ### Лимит памяти Xray
@@ -104,11 +104,13 @@ LOG_LEVEL=INFO
 
 ### Маршрутизация (схема)
 
+Эталон **этого** входного хоста; IP релея — пример деплоя, не требование к стране. Общие режимы: [egress-modes.md](egress-modes.md).
+
 - Inbound: `vless-reality` :443  
 - Исходящий трафик клиентов: outbound **`wg-egress`** (`freedom` + `sockopt.mark` **119** / `0x77`)  
 - Таблица `wg77`: default via `10.77.0.1 dev wg0`  
-- WireGuard peer: **77.238.243.136:51820**  
-- SOCKS `upstream` (77.238.243.136:1080) — в конфиге есть, основной путь клиентов — **WG**
+- WireGuard peer (пример): **77.238.243.136:51820**  
+- SOCKS `upstream` (тот же хост :1080) — запасной путь; на этом узле основной egress — **WG**
 
 ### Reality (пример ссылки для клиента)
 
@@ -210,7 +212,7 @@ vless://<uuid>@193.124.65.182:443?type=tcp&security=reality&sni=microsoft.com&fp
 nproc && free -h | head -2
 systemctl is-active xray veil-xray-api nginx wg-quick@wg0
 systemctl show xray -p MemoryMax --value
-/root/veil-v2ray/scripts/load-protection/check-slo.sh; echo "slo_exit=$?"
+/root/veil-xray/scripts/load-protection/check-slo.sh; echo "slo_exit=$?"
 tail -1 /var/log/veil-slo.log
 ss -tan sport = :443 | awk '{print $1}' | sort | uniq -c | sort -rn | head -5
 ping -c2 10.77.0.1

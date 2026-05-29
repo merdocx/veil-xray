@@ -3,7 +3,7 @@
 ## Быстрая настройка на сервере
 
 ```bash
-/root/veil-v2ray/scripts/ops/setup-github-deploy-ssh.sh
+/root/veil-xray/scripts/ops/setup-github-deploy-ssh.sh
 ```
 
 Скрипт:
@@ -23,7 +23,7 @@
 ## Проверка
 
 ```bash
-cd /root/veil-v2ray
+cd /root/veil-xray
 git fetch origin main
 git status -sb
 ```
@@ -34,10 +34,10 @@ git status -sb
 Не коммитьте PAT и не кладите токен в `.env` проекта.
 
 ```bash
-cd /root/veil-v2ray
-/root/veil-v2ray/scripts/ops/git-with-credentials.sh pull --ff-only origin main
+cd /root/veil-xray
+/root/veil-xray/scripts/ops/git-with-credentials.sh pull --ff-only origin main
 # или любая git-команда:
-# /root/veil-v2ray/scripts/ops/git-with-credentials.sh fetch origin main
+# /root/veil-xray/scripts/ops/git-with-credentials.sh fetch origin main
 ```
 
 `origin` должен быть `https://github.com/merdocx/veil-xray.git`.
@@ -45,9 +45,9 @@ cd /root/veil-v2ray
 ## Обновление кода на prod
 
 ```bash
-cd /root/veil-v2ray
-/root/veil-v2ray/scripts/ops/git-with-credentials.sh pull --ff-only origin main
-/root/veil-v2ray/scripts/ops/deploy-prod.sh
+cd /root/veil-xray
+/root/veil-xray/scripts/ops/git-with-credentials.sh pull --ff-only origin main
+/root/veil-xray/scripts/ops/deploy-prod.sh
 ```
 
 `deploy-prod.sh` применяет sysctl, cron, **policy recommended** (если отличается от эталона), перезапускает API.  
@@ -63,4 +63,4 @@ cd /root/veil-v2ray
 | `Host key verification failed` | Повторить `ssh-keyscan github.com >> ~/.ssh/known_hosts` |
 | HTTPS remote вместо SSH | `git remote set-url origin git@github.com:merdocx/veil-xray.git` |
 
-Публичный ключ для справки (без секрета): [github-deploy-key.pub](github-deploy-key.pub) — обновляется после генерации на хосте.
+Публичный ключ **не хранится в репозитории** — только на сервере в `~/.ssh/id_ed25519_veil_xray_deploy.pub`.

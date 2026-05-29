@@ -1,6 +1,6 @@
 # Veil Xray - VLESS+Reality VPN Server with API Management
 
-**Версия:** 1.3.17 · **Prod:** 2 vCPU / 4 GiB (см. [SERVER_PROFILE](docs/operations/SERVER_PROFILE.md), [VERSION](VERSION), [CHANGELOG](CHANGELOG.md))
+**Версия:** 1.3.18 · **Prod:** 2 vCPU / 4 GiB (см. [SERVER_PROFILE](docs/operations/SERVER_PROFILE.md), [VERSION](VERSION), [CHANGELOG](CHANGELOG.md))
 Сервер VPN на базе Xray с протоколом VLESS+Reality и REST API для управления пользователями и мониторинга трафика.
 
 ## 🚀 Особенности
@@ -19,6 +19,7 @@
 | **Сервисы, логи, ротация, автозапуск, мониторинг, бэкапы** | [docs/OPERATIONS.md](docs/OPERATIONS.md) |
 | Индекс всех документов | [docs/README.md](docs/README.md) |
 | Бэкапы SQLite и логирование API | [scripts/BACKUP_AND_LOGGING.md](scripts/BACKUP_AND_LOGGING.md) |
+| **Egress (direct / SOCKS / WireGuard, релей)** | [docs/operations/egress-modes.md](docs/operations/egress-modes.md) |
 | **Профиль prod-сервера (лимиты, .env, SLO)** | [docs/operations/SERVER_PROFILE.md](docs/operations/SERVER_PROFILE.md) |
 | **Рекомендуемые настройки (policy, SLO, routing)** | [docs/operations/RECOMMENDED_SETTINGS.md](docs/operations/RECOMMENDED_SETTINGS.md) |
 | Защита от перегрузки (SLO, baseline) | [docs/operations/load-protection/](docs/operations/load-protection/) |
@@ -60,8 +61,8 @@ sudo ufw status
 ### 1. Клонирование репозитория
 
 ```bash
-git clone https://github.com/merdocx/veil-v2ray.git
-cd veil-v2ray
+git clone https://github.com/merdocx/veil-xray.git
+cd veil-xray
 ```
 
 ### 2. Установка зависимостей
@@ -113,9 +114,9 @@ XRAY_API_PORT=10085
 
 ### 5. Настройка Xray
 
-**Маршрутизация на prod:** весь трафик с `vless-reality` → **`wg-egress`** (WireGuard на `77.238.243.136`, mark `0x77`); DNS :53 тоже через `wg-egress`; IP релея → `direct`; `geoip:private` → `block`. Проверка: `curl -4 --interface wg0 https://api.ipify.org` → `77.238.243.136`. Подробно: [docs/operations/RECOMMENDED_SETTINGS.md](docs/operations/RECOMMENDED_SETTINGS.md), [SERVER_PROFILE](docs/operations/SERVER_PROFILE.md).
+**Исходящий трафик (egress)** настраивается **на каждом сервере** в Xray, не через API. Релей — **любой** удалённый хост (не привязан к стране). Режимы: прямой выход (`direct`), SOCKS (`upstream`), WireGuard (`wg-egress`). Подробно: [docs/operations/egress-modes.md](docs/operations/egress-modes.md).
 
-**Пример в репозитории** (`xray/config.example.json`): outbound **`upstream`** (SOCKS) — для стендов без WG; на prod используйте **`wg-egress`**. Split RU отключён: [routing-split-ru-restore.md](docs/operations/routing-split-ru-restore.md).
+**Пример в репозитории** ([xray/config.example.json](xray/config.example.json)): SOCKS на релей + routing; на части prod-узлов — WG (см. [SERVER_PROFILE](docs/operations/SERVER_PROFILE.md)). Edge-узлы часто работают только с **`direct`**. Split RU: [routing-split-ru-restore.md](docs/operations/routing-split-ru-restore.md).
 
 **Ключи Reality в примере:** в `config.example.json` указаны ключи в формате, пригодном для `xray -test`; для продакшена сгенерируйте свои (`xray x25519`) и подставьте вместо значений из примера.
 

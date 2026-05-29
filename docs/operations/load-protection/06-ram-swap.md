@@ -24,6 +24,6 @@ SLO: warn если MemAvailable **&lt; 1.5 GiB**, crit **&lt; 1 GiB** — см. 
 [check-ram-swap.sh](../../../scripts/load-protection/check-ram-swap.sh) — краткая сводка для ручного аудита.
 
 ```bash
-/root/veil-v2ray/scripts/load-protection/check-ram-swap.sh
+/root/veil-xray/scripts/load-protection/check-ram-swap.sh
 free -h
 ```

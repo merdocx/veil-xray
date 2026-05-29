@@ -1,3 +1,12 @@
+## [1.3.18] - 2026-05-29
+
+### Документация
+- [docs/operations/egress-modes.md](docs/operations/egress-modes.md) — режимы egress (direct / SOCKS / WG); релей на **любом** сервере
+- [xray/README.md](xray/README.md) — навигация по `config.example.json`
+- API_DOCUMENTATION: `/links`, `/subscription`, `/client-config`, `/happ-config`
+- Удалены устаревшие: `TZ.md`, `01-slo-draft-this-host.md`, `routing-all-via-relay.md`, `README_HTTPS.md`, `migrate_to_common_shortid.py`, `apply-policy-connidle.sh`, `verify-rf-egress-via-nl.sh`, `github-deploy-key.pub`
+- Пути и шаблоны: `veil-v2ray` → `veil-xray` в доках и скриптах
+
 ## [1.3.17] - 2026-05-29
 
 ### Добавлено

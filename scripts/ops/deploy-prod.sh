@@ -2,7 +2,7 @@
 # Деплой veil-xray на production (pull, ops, restart API).
 set -euo pipefail
 
-REPO="${VEIL_REPO_DIR:-/root/veil-v2ray}"
+REPO="${VEIL_REPO_DIR:-/root/veil-xray}"
 cd "$REPO"
 
 git_fn() {

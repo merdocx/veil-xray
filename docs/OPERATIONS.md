@@ -1,8 +1,8 @@
 # Эксплуатация: сервисы, логи, автозапуск, мониторинг
 
-Сводка для продакшена. Путь проекта: `/root/veil-v2ray`.
+Сводка для продакшена. Путь проекта: `/root/veil-xray`.
 
-**Эталон:** [operations/SERVER_PROFILE.md](operations/SERVER_PROFILE.md) · **Рекомендуемые значения:** [operations/RECOMMENDED_SETTINGS.md](operations/RECOMMENDED_SETTINGS.md) (v1.3.17).
+**Эталон:** [operations/SERVER_PROFILE.md](operations/SERVER_PROFILE.md) · **Рекомендуемые значения:** [operations/RECOMMENDED_SETTINGS.md](operations/RECOMMENDED_SETTINGS.md) (v1.3.18).
 
 ## Автозапуск (systemd)
 
@@ -11,7 +11,7 @@
 | `xray.service` | Xray VLESS+Reality, config `/usr/local/etc/xray/config.json` | enabled |
 | `veil-xray-api.service` | FastAPI `127.0.0.1:8000` | enabled |
 | `nginx.service` | TLS reverse proxy для API | enabled |
-| `wg-quick@wg0` | WireGuard egress (NL) | enabled |
+| `wg-quick@wg0` | WireGuard egress на релей (если включён на узле) | enabled |
 | `netdata.service` | Мониторинг (localhost:19999) | **disabled** на prod |
 
 ```bash
@@ -27,7 +27,7 @@ systemctl status xray veil-xray-api nginx --no-pager
 Расписание в **`/etc/cron.d/veil-xray`** (не дублировать в root crontab). Установка:
 
 ```bash
-/root/veil-v2ray/scripts/ops/install-ops-cron.sh
+/root/veil-xray/scripts/ops/install-ops-cron.sh
 ```
 
 Задачи: baseline (1 мин), SLO + алерты (5 мин), ночной рестарт Xray (04:00), отчёты baseline, бэкап БД (02:00). Таблица — в [SERVER_PROFILE.md](operations/SERVER_PROFILE.md).
@@ -38,7 +38,7 @@ systemctl status xray veil-xray-api nginx --no-pager
 
 | Что | Где |
 |-----|-----|
-| Файл | `/root/veil-v2ray/logs/veil_xray_api.log` |
+| Файл | `/root/veil-xray/logs/veil_xray_api.log` |
 | Ротация | Python: **10 MB** × **5** (`log_max_bytes`, `log_backup_count`) |
 | Journal | `journalctl -u veil-xray-api -f` |
 
@@ -77,8 +77,6 @@ journalctl -u xray -f
 | `alert-tcp-pressure.sh` | crit по FIN-WAIT |
 
 Настройка webhook: [operations/load-protection/09-slo-alerting.md](operations/load-protection/09-slo-alerting.md).
-
-Черновик порогов для **старого** 1 vCPU / 2 GiB (история): [01-slo-draft-this-host.md](operations/load-protection/01-slo-draft-this-host.md).
 
 ## Production runbook
 

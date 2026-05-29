@@ -12,7 +12,6 @@
 | `monitor-baseline.sh` | Метрики раз в минуту → `veil-baseline.log` |
 | `baseline-report.sh` | Отчёт за N дней из baseline |
 | `apply-policy-recommended.sh` | Policy levels.0 по Xray docs (handshake, connIdle, buffer) |
-| `apply-policy-connidle.sh` | Wrapper → `apply-policy-recommended.sh` |
 | `sysctl-tcp-tuning.conf` | Шаблон `/etc/sysctl.d/99-veil-tcp.conf` |
 | `logrotate-veil-ops.example` | Ротация `/var/log/veil-*.log` |
 | `stress-mode-nft.sh` | Аварийный DROP новых TCP :443 |

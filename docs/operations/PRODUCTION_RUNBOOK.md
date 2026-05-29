@@ -2,7 +2,7 @@
 
 Краткие правила эксплуатации production-узла. **Лимиты и примеры .env:** [SERVER_PROFILE.md](SERVER_PROFILE.md). Подробнее: [OPERATIONS.md](../OPERATIONS.md), [load-protection/](load-protection/).
 
-**Текущий узел:** 2 vCPU / 4 GiB · ~100 ключей · veil-xray **1.3.17**.
+**Текущий узел:** 2 vCPU / 4 GiB · ~100 ключей · veil-xray **1.3.18**.
 
 ## Запрещено на production
 
@@ -58,10 +58,10 @@ systemctl is-active xray veil-xray-api nginx
 
 # SLO (последняя строка)
 tail -1 /var/log/veil-slo.log
-/root/veil-v2ray/scripts/load-protection/check-slo.sh; echo "exit=$?"
+/root/veil-xray/scripts/load-protection/check-slo.sh; echo "exit=$?"
 
 # Обновление кода (после настройки deploy key)
-cd /root/veil-v2ray && git pull --ff-only origin main
+cd /root/veil-xray && git pull --ff-only origin main
 ```
 
 ## Деплой

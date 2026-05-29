@@ -143,7 +143,7 @@ curl -X POST "https://api.your-domain.com/api/keys" \
 
 **Кодировка:** UTF-8
 
-**Версия API:** 1.3.17
+**Версия API:** 1.3.18
 
 ---
 
@@ -476,6 +476,71 @@ Authorization: Bearer YOUR_SECRET_KEY
 - Ссылка оптимизирована для клиента v2raytun (iOS/Android)
 - Ссылку можно напрямую импортировать в VPN клиент
 - Формат ссылки соответствует стандарту VLESS протокола
+- Возвращает **один** профиль (tcp:443). Для нескольких портов см. `/links` и `/subscription`
+
+**Идентификатор:** в путях ниже `{identifier}` — `key_id` (число) или `uuid` ключа.
+
+---
+
+#### `GET /api/keys/{identifier}/links`
+
+Все профили подключения для ключа (разные порты/транспорты).
+
+**Ответ (успех):**
+```json
+{
+  "key_id": 1,
+  "links": [
+    { "profile": "vless_tcp_443", "link": "vless://..." },
+    { "profile": "vless_tcp_alt", "link": "vless://..." },
+    { "profile": "vless_xhttp", "link": "vless://..." },
+    { "profile": "trojan_tcp", "link": "trojan://..." }
+  ]
+}
+```
+
+Профиль `vless_tcp_443_sni_b` присутствует, если в `.env` задан второй SNI (`REALITY_SNI_B`, ключи B).
+
+---
+
+#### `GET /api/keys/{identifier}/subscription`
+
+Подписка: несколько ссылок или sing-box JSON с автовыбором по ping.
+
+**Query-параметры:**
+- `profiles` (string, по умолчанию `auto`) — `auto` | `happ` | `primary` | `stable` | `all`
+- `format` (string, по умолчанию `base64`) — `base64` | `plain` | `singbox` | `singbox_b64` | `happ_json`
+
+**Примеры:**
+```bash
+GET /api/keys/1/subscription?profiles=auto&format=base64
+GET /api/keys/1/subscription?profiles=auto&format=singbox_b64
+```
+
+| profiles | Содержание |
+|----------|------------|
+| `auto`, `happ` | Набор для мобильных (448, 446, 447 при SNI-B, 443) + urltest в sing-box |
+| `primary` | Только 443 |
+| `stable` | 443 + 446 |
+| `all` | Все профили из `/links` |
+
+**Ответ:** `text/plain` (base64/plain) или `application/json` (singbox/happ_json).
+
+---
+
+#### `GET /api/keys/{identifier}/client-config`
+
+JSON-конфиг Xray для клиента: несколько outbounds, `burstObservatory`, балансировщик `fast-all` (leastPing).
+
+**Ответ:** JSON-документ (импорт в клиенты с поддержкой полного конфига Xray).
+
+---
+
+#### `GET /api/keys/{identifier}/happ-config`
+
+JSON sing-box для Happ (iOS): FakeIP, urltest, порт 448 без Vision-flow.
+
+**Ответ:** JSON-документ.
 
 ---
 
@@ -1041,7 +1106,7 @@ def get_cached_keys():
 
 ---
 
-**Версия документации:** 1.3.17  
+**Версия документации:** 1.3.18  
 **Последнее обновление:** 2026-05-26
 
 ### Переменные окружения (эксплуатация)

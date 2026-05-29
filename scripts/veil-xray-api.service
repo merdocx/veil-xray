@@ -5,9 +5,9 @@ After=network.target
 [Service]
 Type=simple
 User=root
-WorkingDirectory=/root/veil-v2ray
-Environment="PATH=/root/veil-v2ray/venv/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
-ExecStart=/root/veil-v2ray/venv/bin/python3 -m uvicorn api.main:app --host 127.0.0.1 --port 8000 --proxy-headers --forwarded-allow-ips 127.0.0.1 --timeout-keep-alive 10 --limit-concurrency 200 --backlog 2048
+WorkingDirectory=/root/veil-xray
+Environment="PATH=/root/veil-xray/venv/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+ExecStart=/root/veil-xray/venv/bin/python3 -m uvicorn api.main:app --host 127.0.0.1 --port 8000 --proxy-headers --forwarded-allow-ips 127.0.0.1 --timeout-keep-alive 10 --limit-concurrency 200 --backlog 2048
 Restart=always
 RestartSec=10
 StandardOutput=journal

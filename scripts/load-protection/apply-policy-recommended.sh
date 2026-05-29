@@ -4,7 +4,7 @@
 set -euo pipefail
 
 CONFIG="${XRAY_CONFIG_PATH:-/usr/local/etc/xray/config.json}"
-BACKUP_DIR="${VEIL_XRAY_BACKUP_DIR:-/root/veil-v2ray/backups}"
+BACKUP_DIR="${VEIL_XRAY_BACKUP_DIR:-/root/veil-xray/backups}"
 
 HANDSHAKE="${POLICY_HANDSHAKE:-4}"
 CONN_IDLE="${POLICY_CONN_IDLE:-300}"

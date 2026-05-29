@@ -23,7 +23,7 @@
 ## Минимальный cron
 
 ```bash
-/root/veil-v2ray/scripts/ops/install-ops-cron.sh
+/root/veil-xray/scripts/ops/install-ops-cron.sh
 ```
 
 Файл `/etc/cron.d/veil-xray`: baseline, SLO, nightly Xray restart, daily/weekly `baseline-report.sh`.

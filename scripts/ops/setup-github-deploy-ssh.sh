@@ -5,7 +5,7 @@ set -euo pipefail
 KEY_NAME="id_ed25519_veil_xray_deploy"
 SSH_DIR="${HOME}/.ssh"
 KEY_PATH="${SSH_DIR}/${KEY_NAME}"
-REPO_DIR="${VEIL_REPO_DIR:-/root/veil-v2ray}"
+REPO_DIR="${VEIL_REPO_DIR:-/root/veil-xray}"
 GITHUB_HOST="github.com"
 GITHUB_REPO="git@github.com:merdocx/veil-xray.git"
 

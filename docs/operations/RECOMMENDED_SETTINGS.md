@@ -1,6 +1,6 @@
 # Рекомендуемые настройки (prod)
 
-**Актуально:** 2026-05-26 · Xray **26.2.6** · ~100 ключей · вход **193.124.65.182** → egress **77.238.243.136** (WireGuard)
+**Актуально:** 2026-05-29 · Xray **26.2.6** · ~100 ключей · пример: вход **193.124.65.182** → egress через **релей** (WireGuard; IP релея в вашем деплое свой)
 
 Единая шпаргалка по значениям из [Xray Policy](https://xtls.github.io/en/config/policy.html) и практик VLESS+Reality (2026). Эталон на сервере: [SERVER_PROFILE.md](SERVER_PROFILE.md).
 
@@ -34,34 +34,36 @@
 | `statsUserUplink` / `statsUserDownlink` | **true** | нужно API статистики |
 
 ```bash
-/root/veil-v2ray/scripts/load-protection/apply-policy-recommended.sh
+/root/veil-xray/scripts/load-protection/apply-policy-recommended.sh
 systemctl restart xray   # краткий обрыв у всех клиентов
 ```
 
 Переопределение (разово):
 
 ```bash
-POLICY_CONN_IDLE=600 /root/veil-v2ray/scripts/load-protection/apply-policy-recommended.sh
+POLICY_CONN_IDLE=600 /root/veil-xray/scripts/load-protection/apply-policy-recommended.sh
 ```
 
 ---
 
-## 3. Маршрутизация (prod)
+## 3. Маршрутизация (egress)
+
+Релей — **любой** сервер; см. [egress-modes.md](egress-modes.md). На **входных** узлах с WG (пример в [SERVER_PROFILE.md](SERVER_PROFILE.md)):
 
 | Правило | Outbound |
 |---------|----------|
 | `vless-reality` (весь трафик) | **`wg-egress`** (`freedom` + `sockopt.mark` **119** / `0x77`) |
 | DNS :53 с inbound | `wg-egress` |
-| IP релея `77.238.243.136` | `direct` (анти-петля) |
+| IP релея (`RELAY_IP`) | `direct` (анти-петля) |
 | `geoip:private` | `block` |
 
-Проверка egress:
+Проверка egress (WG):
 
 ```bash
-curl -4 --interface wg0 https://api.ipify.org   # ожидается 77.238.243.136
+curl -4 --interface wg0 https://api.ipify.org   # ожидается публичный IP релея, не входного узла
 ```
 
-Шаблон в репозитории: `xray/config.example.json` (SOCKS `upstream` — для стендов без WG; prod — WG, см. SERVER_PROFILE).
+Шаблон SOCKS: `xray/config.example.json`. Edge без релея: только `direct` в `routing`.
 
 ---
 
@@ -112,9 +114,9 @@ BACKGROUND_TRAFFIC_SYNC_INTERVAL_S=600
 ## 7. Деплой и git
 
 ```bash
-cd /root/veil-v2ray
-/root/veil-v2ray/scripts/ops/git-with-credentials.sh pull --ff-only origin main
-/root/veil-v2ray/scripts/ops/deploy-prod.sh
+cd /root/veil-xray
+/root/veil-xray/scripts/ops/git-with-credentials.sh pull --ff-only origin main
+/root/veil-xray/scripts/ops/deploy-prod.sh
 ```
 
 См. [github-deploy.md](github-deploy.md), [PRODUCTION_RUNBOOK.md](PRODUCTION_RUNBOOK.md).

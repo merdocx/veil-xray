@@ -25,7 +25,7 @@ RestartSec=3
 
 ```bash
 sudo install -d /etc/systemd/system/xray.service.d
-sudo cp /root/veil-v2ray/scripts/load-protection/systemd/xray.service.d-override.conf.example \
+sudo cp /root/veil-xray/scripts/load-protection/systemd/xray.service.d-override.conf.example \
   /etc/systemd/system/xray.service.d/override.conf
 sudo systemctl daemon-reload
 sudo systemctl restart xray
@@ -40,8 +40,6 @@ sudo systemctl restart xray
 | 8 GiB | 1.5G–2G (при росте числа клиентов) |
 
 Слишком низкий **MemoryMax** → OOM kill Xray и обрыв всех VPN. Задавайте **выше пика RSS + запас** по `veil-baseline.log` / `check-slo.sh`.
-
-Исторический черновик для 1 vCPU / 2 GiB: [01-slo-draft-this-host.md](01-slo-draft-this-host.md).
 
 ## Имя юнита
 

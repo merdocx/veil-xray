@@ -12,7 +12,7 @@ else
   echo "Created system user $USER"
 fi
 
-REPO="${VEIL_REPO_DIR:-/root/veil-v2ray}"
+REPO="${VEIL_REPO_DIR:-/root/veil-xray}"
 for d in "$REPO/database" "$REPO/logs"; do
   install -d -o "$USER" -g "$GROUP" -m 750 "$d"
 done

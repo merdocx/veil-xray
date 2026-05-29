@@ -1,6 +1,6 @@
 # Резервное копирование и логирование
 
-Пути ниже даны для стандартной установки в **`/root/veil-v2ray`**. При другом каталоге замените префикс.
+Пути ниже даны для стандартной установки в **`/root/veil-xray`**. При другом каталоге замените префикс.
 
 ## Резервное копирование базы данных
 
@@ -14,7 +14,7 @@
 ### Ручной запуск
 
 ```bash
-/root/veil-v2ray/scripts/backup_database.sh
+/root/veil-xray/scripts/backup_database.sh
 ```
 
 ### Расписание (cron)
@@ -22,21 +22,21 @@
 На прод-сервере проекта в **root crontab** добавлено ежедневное задание **02:00** с логом `logs/backup.log`. Для нового хоста добавьте вручную:
 
 ```cron
-0 2 * * * /root/veil-v2ray/scripts/backup_database.sh >> /root/veil-v2ray/logs/backup.log 2>&1
+0 2 * * * /root/veil-xray/scripts/backup_database.sh >> /root/veil-xray/logs/backup.log 2>&1
 ```
 
-Каталог `logs/` создаётся при первом запуске API или вручную: `mkdir -p /root/veil-v2ray/logs`.
+Каталог `logs/` создаётся при первом запуске API или вручную: `mkdir -p /root/veil-xray/logs`.
 
 ### Ротация `backup.log`
 
-На прод-сервере: **`/etc/logrotate.d/veil-v2ray-backup-log`** (ежемесячно, 12 архивов). Шаблон в репозитории: [logrotate/veil-v2ray-backup-log.example](logrotate/veil-v2ray-backup-log.example).
+На прод-сервере: **`/etc/logrotate.d/veil-xray-backup-log`** (ежемесячно, 12 архивов). Шаблон в репозитории: [logrotate/veil-xray-backup-log.example](logrotate/veil-xray-backup-log.example).
 
 ### Восстановление из бэкапа
 
 ```bash
 sudo systemctl stop veil-xray-api
-gunzip -c /root/veil-v2ray/backups/veil_xray_YYYYMMDD_HHMMSS.db.gz > /tmp/restore.db
-sqlite3 /root/veil-v2ray/database/veil_xray.db ".restore '/tmp/restore.db'"
+gunzip -c /root/veil-xray/backups/veil_xray_YYYYMMDD_HHMMSS.db.gz > /tmp/restore.db
+sqlite3 /root/veil-xray/database/veil_xray.db ".restore '/tmp/restore.db'"
 sudo systemctl start veil-xray-api
 ```
 
@@ -113,13 +113,13 @@ journalctl -u xray -f
 
 ### Бэкап не создаётся
 
-- Права: `chmod +x /root/veil-v2ray/scripts/backup_database.sh`
+- Права: `chmod +x /root/veil-xray/scripts/backup_database.sh`
 - Наличие `sqlite3`: `which sqlite3`
-- Лог cron (если настроен): `tail /root/veil-v2ray/logs/backup.log`
+- Лог cron (если настроен): `tail /root/veil-xray/logs/backup.log`
 
 ### Логи API не пишутся
 
-- `mkdir -p /root/veil-v2ray/logs` и права на запись пользователя сервиса
+- `mkdir -p /root/veil-xray/logs` и права на запись пользователя сервиса
 - Проверка `.env` и перезапуск `veil-xray-api`
 
 

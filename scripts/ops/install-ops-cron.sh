@@ -2,7 +2,7 @@
 # Установка cron через /etc/cron.d/veil-xray (идемпотентно).
 set -euo pipefail
 
-REPO="${VEIL_REPO_DIR:-/root/veil-v2ray}"
+REPO="${VEIL_REPO_DIR:-/root/veil-xray}"
 DEST="/etc/cron.d/veil-xray"
 
 chmod +x "${REPO}/scripts/load-protection/"*.sh "${REPO}/scripts/ops/"*.sh 2>/dev/null || true
@@ -11,7 +11,7 @@ cat >"$DEST" <<EOF
 SHELL=/bin/bash
 PATH=/usr/local/sbin:/usr/local/bin:/sbin:/bin:/usr/sbin:/usr/bin
 
-# veil-v2ray ops (managed by install-ops-cron.sh)
+# veil-xray ops (managed by install-ops-cron.sh)
 * * * * * root ${REPO}/scripts/load-protection/monitor-baseline.sh >> /var/log/veil-baseline.log 2>&1
 */5 * * * * root ${REPO}/scripts/load-protection/check-slo.sh
 */5 * * * * root ${REPO}/scripts/load-protection/alert-slo-crit.sh
