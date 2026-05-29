@@ -50,6 +50,26 @@ class VlessLinkResponse(BaseModel):
     vless_link: str
 
 
+class KeyLinkProfile(BaseModel):
+    """Один профиль подключения (ссылка) для ключа."""
+
+    profile: Literal[
+        "vless_tcp_443",
+        "vless_tcp_alt",
+        "vless_xhttp",
+        "trojan_tcp",
+        "vless_tcp_443_sni_b",
+    ]
+    link: str
+
+
+class KeyLinksResponse(BaseModel):
+    """Набор профилей подключения для одного ключа."""
+
+    key_id: int
+    links: list[KeyLinkProfile]
+
+
 class KeyListResponse(BaseModel):
     """Модель ответа со списком ключей"""
 

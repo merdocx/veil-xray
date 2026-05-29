@@ -111,21 +111,72 @@ class XrayClient:
         import tempfile
         import os
 
-        # Создаем временный JSON файл с конфигурацией пользователя
-        # Формат должен соответствовать структуре inbound из Xray
-        user_config = {
-            "inbounds": [
+        vless_443 = {
+            "tag": settings.xray_vless_reality_inbound_tag,
+            "protocol": "vless",
+            "port": settings.reality_port,
+            "settings": {
+                "clients": [{"id": uuid, "flow": flow_val, "email": email}],
+                "decryption": "none",
+            },
+        }
+
+        vless_alt = {
+            "tag": settings.xray_vless_reality_alt_inbound_tag,
+            "protocol": "vless",
+            "port": settings.reality_alt_port_tcp,
+            "settings": {
+                "clients": [{"id": uuid, "flow": flow_val, "email": email}],
+                "decryption": "none",
+            },
+        }
+
+        vless_happ = {
+            "tag": settings.xray_vless_reality_happ_inbound_tag,
+            "protocol": "vless",
+            "port": settings.reality_happ_port_tcp,
+            "settings": {
+                "clients": [{"id": uuid, "email": email}],
+                "decryption": "none",
+            },
+        }
+
+        vless_xhttp = {
+            "tag": settings.xray_vless_reality_xhttp_inbound_tag,
+            "protocol": "vless",
+            "port": settings.reality_xhttp_port,
+            "settings": {
+                "clients": [{"id": uuid, "flow": flow_val, "email": email}],
+                "decryption": "none",
+            },
+        }
+
+        trojan = {
+            "tag": settings.xray_trojan_reality_inbound_tag,
+            "protocol": "trojan",
+            "port": settings.trojan_reality_port,
+            "settings": {
+                "clients": [{"password": uuid, "email": email}],
+            },
+        }
+
+        inbounds = [vless_443, vless_alt, vless_happ, vless_xhttp, trojan]
+        if settings.reality_sni_b_enabled:
+            inbounds.append(
                 {
-                    "tag": "vless-reality",
+                    "tag": settings.xray_vless_reality_sni_b_inbound_tag,
                     "protocol": "vless",
-                    "port": 443,
+                    "port": settings.reality_port_sni_b,
                     "settings": {
                         "clients": [{"id": uuid, "flow": flow_val, "email": email}],
                         "decryption": "none",
                     },
                 }
-            ]
-        }
+            )
+
+        # Создаем временный JSON файл с конфигурацией пользователя
+        # Формат должен соответствовать структуре inbound из Xray
+        user_config = {"inbounds": inbounds}
 
         try:
             # Создаем временный файл
@@ -245,33 +296,32 @@ class XrayClient:
         try:
             # Выполняем CLI команду для удаления пользователя
             server = f"{settings.xray_api_host}:{settings.xray_api_port}"
-            cmd = [
-                "/usr/local/bin/xray",
-                "api",
-                "rmu",
-                f"--server={server}",
-                f"--timeout={int(self.timeout)}",
-                "--tag=vless-reality",
-                email,
-            ]
+            async def _rmu(tag: str) -> subprocess.CompletedProcess:
+                cmd = [
+                    "/usr/local/bin/xray",
+                    "api",
+                    "rmu",
+                    f"--server={server}",
+                    f"--timeout={int(self.timeout)}",
+                    f"--tag={tag}",
+                    email,
+                ]
+                return await self._run_subprocess(cmd, timeout=self.timeout)
 
-            result = await self._run_subprocess(cmd, timeout=self.timeout)
+            tags = settings.all_user_inbound_tags()
 
-            if result.returncode == 0:
-                logger.info(f"✅ User {email} removed successfully from Xray via API")
-                return True
-            else:
+            # Удаляем из всех inbound tags. Ошибку "not found" считаем не критичной.
+            for tag in tags:
+                result = await _rmu(tag)
+                if result.returncode == 0:
+                    continue
                 error_msg = result.stderr or result.stdout or "Unknown error"
-                # Если пользователь не найден, это не критичная ошибка
                 if "not found" in error_msg.lower() or "no such" in error_msg.lower():
-                    logger.warning(
-                        f"⚠️  User {email} not found in Xray (may have been already removed)"
-                    )
-                    return True  # Возвращаем True, так как цель достигнута
-                logger.error(
-                    f"❌ Failed to remove user {email} via Xray API: {error_msg}"
-                )
-                raise Exception(f"Xray API error: {error_msg}")
+                    continue
+                raise Exception(f"Xray API error (tag={tag}): {error_msg}")
+
+            logger.info(f"✅ User {email} removed successfully from Xray via API")
+            return True
 
         except subprocess.TimeoutExpired:
             logger.error(

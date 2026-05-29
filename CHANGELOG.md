@@ -1,3 +1,19 @@
+## [1.3.17] - 2026-05-29
+
+### Добавлено
+- API: `GET /api/keys/{id}/links` — профили VLESS/Trojan (443, 446, 447 SNI-B, 448, XHTTP, Trojan).
+- API: `GET /api/keys/{id}/subscription` — `profiles=auto|happ|primary|stable|all`, форматы `base64`, `plain`, `singbox`, `singbox_b64`, `happ_json`.
+- API: `GET /api/keys/{id}/client-config` — Xray JSON с `burstObservatory` и балансировщиком `fast-all`.
+- API: `GET /api/keys/{id}/happ-config` — sing-box для Happ (FakeIP, urltest, порт 448 без Vision).
+- Второй SNI REALITY (порт 447): настройки `REALITY_*_B`, inbound `vless-reality-sni-b`.
+- Порты 446 (alt), 448 (Happ без flow); синхронизация клиентов во все VLESS/Trojan inbounds.
+- `tests/test_client_config.py` — проверка outbounds и balancer в client-config.
+- Расширен `xray/config.example.json` (inbounds 446/447/448, XHTTP, Trojan, SOCKS upstream).
+
+### Изменено
+- `.env.example`: alt/SNI-B/Happ-порты и подсказки по subscription URL.
+- `build_vless_link*`, helpers в `api/utils.py` для мультипрофильных ссылок и sing-box подписок.
+
 ## [1.3.16] - 2026-05-26
 
 ### Документация

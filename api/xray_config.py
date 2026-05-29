@@ -168,30 +168,46 @@ class XrayConfigManager:
             logger.error(f"❌ Error saving Xray config: {e}")
             return False
 
-    def _get_vless_inbound(self, config: dict) -> Optional[dict]:
+    def _get_inbound_by_tag(self, config: dict, tag: str) -> Optional[dict]:
         for inbound in config.get("inbounds", []):
-            if inbound.get("protocol") == "vless":
+            if inbound.get("tag") == tag:
                 return inbound
         return None
+
+    def _get_inbounds_by_tags(self, config: dict, tags: list[str]) -> list[dict]:
+        found: list[dict] = []
+        for tag in tags:
+            inbound = self._get_inbound_by_tag(config, tag)
+            if inbound:
+                found.append(inbound)
+        return found
 
     def _ensure_common_short_id_in_config(
         self, config: dict, common_short_id: str
     ) -> bool:
         """Добавить общий short_id в config (in-memory). Возвращает True если изменён."""
-        vless_inbound = self._get_vless_inbound(config)
-        if not vless_inbound:
+        changed = False
+        tags = settings.all_user_inbound_tags()
+        inbounds = self._get_inbounds_by_tags(config, tags)
+        if not inbounds:
             return False
-        stream_settings = vless_inbound.setdefault("streamSettings", {})
-        reality_settings = stream_settings.setdefault("realitySettings", {})
-        short_ids = reality_settings.get("shortIds", [])
-        if common_short_id not in short_ids:
-            short_ids.append(common_short_id)
-            reality_settings["shortIds"] = short_ids
-            return True
-        return False
+        for inbound in inbounds:
+            stream_settings = inbound.setdefault("streamSettings", {})
+            reality_settings = stream_settings.setdefault("realitySettings", {})
+            short_ids = reality_settings.get("shortIds", [])
+            if common_short_id not in short_ids:
+                short_ids.append(common_short_id)
+                reality_settings["shortIds"] = short_ids
+                changed = True
+        return changed
 
     def _add_client_in_config(
-        self, vless_inbound: dict, uuid: str, email: Optional[str] = None
+        self,
+        vless_inbound: dict,
+        uuid: str,
+        email: Optional[str] = None,
+        *,
+        use_flow: bool = True,
     ) -> bool:
         """Добавить клиента в inbound. True если новый клиент добавлен."""
         clients = vless_inbound["settings"].setdefault("clients", [])
@@ -199,7 +215,10 @@ class XrayConfigManager:
             return False
         if not email:
             email = f"user_{uuid[:8]}"
-        clients.append({"id": uuid, "flow": settings.reality_flow, "email": email})
+        entry: dict = {"id": uuid, "email": email}
+        if use_flow:
+            entry["flow"] = settings.reality_flow
+        clients.append(entry)
         vless_inbound["settings"]["clients"] = clients
         return True
 
@@ -222,9 +241,10 @@ class XrayConfigManager:
         }
         try:
             config = self.load_config()
-            vless_inbound = self._get_vless_inbound(config)
-            if not vless_inbound:
-                result["error"] = "VLESS inbound not found"
+            tags = settings.vless_inbound_tags()
+            vless_inbounds = self._get_inbounds_by_tags(config, tags)
+            if not vless_inbounds:
+                result["error"] = "VLESS inbounds not found"
                 return result
 
             common_short_id = settings.reality_common_short_id
@@ -234,9 +254,22 @@ class XrayConfigManager:
                 )
 
             for uuid, email in users:
-                if self._add_client_in_config(vless_inbound, uuid, email):
+                # Добавляем клиента во все VLESS inbounds (tcp + alt + xhttp)
+                any_added = False
+                any_present = False
+                for inbound in vless_inbounds:
+                    use_flow = (
+                        inbound.get("tag") != settings.xray_vless_reality_happ_inbound_tag
+                    )
+                    if self._add_client_in_config(
+                        inbound, uuid, email, use_flow=use_flow
+                    ):
+                        any_added = True
+                    else:
+                        any_present = True
+                if any_added:
                     result["added"] += 1
-                else:
+                elif any_present:
                     result["already_present"] += 1
 
             if self.save_config(config, validate=validate, test=test):
@@ -265,8 +298,9 @@ class XrayConfigManager:
         """
         try:
             config = self.load_config()
-            if not self._get_vless_inbound(config):
-                logger.error("VLESS inbound not found in Xray config")
+            tags = settings.all_user_inbound_tags()
+            if not self._get_inbounds_by_tags(config, tags):
+                logger.error("Reality inbounds not found in Xray config")
                 return False
             if self._ensure_common_short_id_in_config(config, common_short_id):
                 logger.info(
@@ -302,18 +336,28 @@ class XrayConfigManager:
         """
         try:
             config = self.load_config()
-            vless_inbound = self._get_vless_inbound(config)
-            if not vless_inbound:
-                logger.error("VLESS inbound not found in Xray config")
+            tags = settings.vless_inbound_tags()
+            vless_inbounds = self._get_inbounds_by_tags(config, tags)
+            if not vless_inbounds:
+                logger.error("VLESS inbounds not found in Xray config")
                 return False
 
             common_short_id = settings.reality_common_short_id
             self._ensure_common_short_id_in_config(config, common_short_id)
 
-            if self._add_client_in_config(vless_inbound, uuid, email):
-                logger.info(f"Added user {uuid[:8]}... to Xray config")
+            added_any = False
+            for inbound in vless_inbounds:
+                use_flow = (
+                    inbound.get("tag") != settings.xray_vless_reality_happ_inbound_tag
+                )
+                if self._add_client_in_config(
+                    inbound, uuid, email, use_flow=use_flow
+                ):
+                    added_any = True
+            if added_any:
+                logger.info(f"Added user {uuid[:8]}... to Xray config (all VLESS inbounds)")
             else:
-                logger.info(f"User {uuid[:8]}... already exists in config")
+                logger.info(f"User {uuid[:8]}... already exists in VLESS inbounds")
 
             logger.info(
                 f"User {uuid[:8]}... added to Xray config (using common short_id)"
@@ -352,25 +396,23 @@ class XrayConfigManager:
         try:
             config = self.load_config()
 
-            # Находим VLESS inbound
-            vless_inbound = None
-            for inbound in config.get("inbounds", []):
-                if inbound.get("protocol") == "vless":
-                    vless_inbound = inbound
-                    break
-
-            if not vless_inbound:
-                logger.error("VLESS inbound not found in Xray config")
+            tags = settings.vless_inbound_tags()
+            vless_inbounds = self._get_inbounds_by_tags(config, tags)
+            if not vless_inbounds:
+                logger.error("VLESS inbounds not found in Xray config")
                 return False
 
-            # Удаляем пользователя из clients
-            clients = vless_inbound["settings"].get("clients", [])
-            original_count = len(clients)
-            clients = [c for c in clients if c.get("id") != uuid]
-            vless_inbound["settings"]["clients"] = clients
+            removed_any = False
+            for inbound in vless_inbounds:
+                clients = inbound.get("settings", {}).get("clients", [])
+                original_count = len(clients)
+                clients = [c for c in clients if c.get("id") != uuid]
+                inbound.setdefault("settings", {})["clients"] = clients
+                if len(clients) < original_count:
+                    removed_any = True
 
-            if len(clients) < original_count:
-                logger.info(f"Removed user {uuid[:8]}... from Xray config")
+            if removed_any:
+                logger.info(f"Removed user {uuid[:8]}... from Xray config (all VLESS inbounds)")
 
             # НЕ удаляем Short ID из realitySettings - используем общий short_id для всех
             # Общий short_id остается в конфигурации для других пользователей

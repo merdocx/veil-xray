@@ -2,7 +2,7 @@
 
 Сводка для продакшена. Путь проекта: `/root/veil-v2ray`.
 
-**Эталон:** [operations/SERVER_PROFILE.md](operations/SERVER_PROFILE.md) · **Рекомендуемые значения:** [operations/RECOMMENDED_SETTINGS.md](operations/RECOMMENDED_SETTINGS.md) (v1.3.16).
+**Эталон:** [operations/SERVER_PROFILE.md](operations/SERVER_PROFILE.md) · **Рекомендуемые значения:** [operations/RECOMMENDED_SETTINGS.md](operations/RECOMMENDED_SETTINGS.md) (v1.3.17).
 
 ## Автозапуск (systemd)
 

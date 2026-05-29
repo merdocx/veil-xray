@@ -12,12 +12,23 @@ from config.settings import settings
 
 def main():
     """Генерация и вывод ключей Reality"""
+    import argparse
+
+    parser = argparse.ArgumentParser(description="Generate Reality x25519 key pair")
+    parser.add_argument(
+        "--suffix",
+        default="",
+        help="Env suffix for second profile, e.g. B → REALITY_PUBLIC_KEY_B",
+    )
+    args = parser.parse_args()
+    suffix = f"_{args.suffix.upper()}" if args.suffix else ""
+
     print("Generating Reality keys...")
     
     public_key, private_key = generate_reality_keys()
     
     print("\n" + "="*60)
-    print("REALITY KEYS GENERATED")
+    print(f"REALITY KEYS GENERATED{(' (' + args.suffix.upper() + ')') if args.suffix else ''}")
     print("="*60)
     print(f"\nPublic Key (pbk):\n{public_key}")
     print(f"\nPrivate Key (хранить в секрете!):\n{private_key}")
@@ -25,8 +36,10 @@ def main():
     print("\nВАЖНО:")
     print("1. Сохраните приватный ключ в безопасном месте")
     print("2. Добавьте приватный ключ в конфигурацию Xray (config.json)")
-    print("3. Установите публичный ключ в переменные окружения или config/settings.py")
+    print(f"3. Добавьте в .env: REALITY_PUBLIC_KEY{suffix}=... и REALITY_PRIVATE_KEY{suffix}=...")
     print("4. Публичный ключ будет использоваться для генерации VLESS ссылок")
+    if suffix:
+        print(f"5. Для SNI-B также задайте REALITY_SNI{suffix}= и REALITY_DEST{suffix}=")
     print("="*60 + "\n")
     
     # Сохранение в файл (опционально)

@@ -38,6 +38,14 @@ class Settings(BaseSettings):
     reality_fingerprint: str = "chrome"
     reality_dest: str = "www.microsoft.com:443"
     reality_port: int = 443
+    # Дополнительные входы (anti-block fallback)
+    reality_alt_port_tcp: int = 446
+    # Happ / sing-box на iOS: inbound без Vision-flow (порт 448)
+    reality_happ_port_tcp: int = 448
+    reality_xhttp_port: int = 8445
+    trojan_reality_port: int = 2085
+    # XHTTP транспорт: path должен совпадать на клиенте/сервере
+    reality_xhttp_path: str = "/a7f9d2c8"
 
     # Публичный и приватный ключи Reality (генерируются при первом запуске)
     reality_public_key: Optional[str] = None
@@ -52,6 +60,23 @@ class Settings(BaseSettings):
 
     # Домен
     domain: str = "veil-bear.ru"
+
+    # Теги inbounds в Xray (должны совпадать с config.json)
+    xray_vless_reality_inbound_tag: str = "vless-reality"
+    xray_vless_reality_alt_inbound_tag: str = "vless-reality-alt"
+    xray_vless_reality_happ_inbound_tag: str = "vless-reality-happ"
+    xray_vless_reality_xhttp_inbound_tag: str = "vless-reality-xhttp"
+    xray_trojan_reality_inbound_tag: str = "trojan-reality"
+
+    # Второй REALITY-профиль (SNI-B), опционально
+    reality_sni_b: Optional[str] = None
+    reality_dest_b: str = "www.cloudflare.com:443"
+    reality_fingerprint_b: Optional[str] = None
+    reality_port_sni_b: int = 447
+    reality_public_key_b: Optional[str] = None
+    reality_private_key_b: Optional[str] = None
+    reality_common_short_id_b: Optional[str] = None
+    xray_vless_reality_sni_b_inbound_tag: str = "vless-reality-sni-b"
 
     # Логирование
     log_level: str = "INFO"
@@ -78,6 +103,36 @@ class Settings(BaseSettings):
         if not self.api_cors_origins.strip():
             return []
         return [x.strip() for x in self.api_cors_origins.split(",") if x.strip()]
+
+    @property
+    def reality_sni_b_enabled(self) -> bool:
+        return bool(
+            self.reality_sni_b
+            and self.reality_public_key_b
+            and self.reality_private_key_b
+        )
+
+    @property
+    def reality_short_id_b(self) -> str:
+        return self.reality_common_short_id_b or self.reality_common_short_id
+
+    @property
+    def reality_fingerprint_b_value(self) -> str:
+        return self.reality_fingerprint_b or self.reality_fingerprint
+
+    def vless_inbound_tags(self) -> List[str]:
+        tags = [
+            self.xray_vless_reality_inbound_tag,
+            self.xray_vless_reality_alt_inbound_tag,
+            self.xray_vless_reality_happ_inbound_tag,
+            self.xray_vless_reality_xhttp_inbound_tag,
+        ]
+        if self.reality_sni_b_enabled:
+            tags.append(self.xray_vless_reality_sni_b_inbound_tag)
+        return tags
+
+    def all_user_inbound_tags(self) -> List[str]:
+        return self.vless_inbound_tags() + [self.xray_trojan_reality_inbound_tag]
 
 
 settings = Settings()

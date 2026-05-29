@@ -11,7 +11,7 @@ from fastapi import (
 )
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import RedirectResponse, JSONResponse
+from fastapi.responses import RedirectResponse, JSONResponse, Response
 from starlette.middleware.base import BaseHTTPMiddleware
 from sqlalchemy.orm import Session
 from typing import Any, List, Optional
@@ -21,6 +21,8 @@ import logging.handlers
 import asyncio
 import os
 import secrets
+import base64
+import json
 from contextlib import asynccontextmanager
 from datetime import datetime
 from pathlib import Path
@@ -35,6 +37,8 @@ from api.models import (
     KeyDeleteResponse,
     TrafficResponse,
     VlessLinkResponse,
+    KeyLinksResponse,
+    KeyLinkProfile,
     KeyListResponse,
     TrafficResetResponse,
     XraySyncStartResponse,
@@ -47,7 +51,14 @@ from api.utils import (
     generate_uuid,
     generate_short_id,
     build_vless_link,
+    build_vless_link_with_transport,
+    build_trojan_reality_link,
     parse_key_identifier,
+    normalize_reality_public_key,
+    build_client_config,
+    build_happ_singbox_config,
+    build_auto_subscription_links,
+    build_auto_singbox_subscription_config,
 )
 from config.settings import settings
 
@@ -673,7 +684,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="Veil Xray API",
     description="API для управления VLESS+Reality VPN сервером",
-    version="1.3.16",
+    version="1.3.17",
     lifespan=lifespan,
     **_docs_kw,
 )
@@ -1129,9 +1140,7 @@ async def get_vless_link(
             # Если не удалось конвертировать, используем как есть
             pass
 
-        # Построение VLESS ссылки
-        # Используем общий short_id для всех пользователей (из настроек)
-        # Это позволяет избежать перезагрузки Xray при создании/удалении ключей
+        # Построение VLESS (основной профиль: tcp:443)
         common_short_id = settings.reality_common_short_id
         vless_link = build_vless_link(
             uuid=key.uuid,  # type: ignore
@@ -1141,7 +1150,7 @@ async def get_vless_link(
             sni=settings.reality_sni,
             fingerprint=settings.reality_fingerprint,
             public_key=public_key,  # Используем URL-safe формат
-            dest=settings.reality_dest,
+            dest="vless_tcp_443",
             flow=settings.reality_flow,
         )
 
@@ -1245,7 +1254,7 @@ async def get_key_config(
         except Exception:
             pass
 
-        # Построение VLESS ссылки
+        # Построение VLESS (основной профиль: tcp:443)
         common_short_id = settings.reality_common_short_id
         vless_link = build_vless_link(
             uuid=key.uuid,  # type: ignore
@@ -1255,7 +1264,7 @@ async def get_key_config(
             sni=settings.reality_sni,
             fingerprint=settings.reality_fingerprint,
             public_key=public_key,
-            dest=settings.reality_dest,
+            dest="vless_tcp_443",
             flow=settings.reality_flow,
         )
 
@@ -1407,7 +1416,7 @@ async def get_key_config_by_uuid(
         except Exception:
             pass
 
-        # Построение VLESS ссылки
+        # Построение VLESS (основной профиль: tcp:443)
         common_short_id = settings.reality_common_short_id
         vless_link = build_vless_link(
             uuid=key.uuid,  # type: ignore
@@ -1417,7 +1426,7 @@ async def get_key_config_by_uuid(
             sni=settings.reality_sni,
             fingerprint=settings.reality_fingerprint,
             public_key=public_key,
-            dest=settings.reality_dest,
+            dest="vless_tcp_443",
             flow=settings.reality_flow,
         )
 
@@ -1435,6 +1444,366 @@ async def get_key_config_by_uuid(
             default_detail="Failed to get key config",
             db=db,
         )
+
+
+@app.get(
+    "/api/keys/{identifier}/links",
+    response_model=KeyLinksResponse,
+    tags=["Keys"],
+)
+async def get_key_links(
+    identifier: str,
+    token: str = Depends(verify_token),
+    db: Session = Depends(get_db),
+):
+    """
+    Получение набора профилей подключения для ключа.
+
+    Профили:
+    - vless_tcp_443: основной (как раньше)
+    - vless_tcp_alt: fallback tcp на альтернативном порту
+    - vless_xhttp: fallback транспорт xhttp
+    - trojan_tcp: fallback trojan+reality
+    """
+    # Определяем тип идентификатора (UUID или key_id)
+    try:
+        uuid_value, key_id_value, is_uuid = parse_key_identifier(identifier)
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=str(e),
+        )
+
+    if is_uuid:
+        key = db.query(Key).filter(Key.uuid == uuid_value).first()
+    else:
+        key = db.query(Key).filter(Key.id == key_id_value).first()
+
+    if not key:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Key not found",
+        )
+
+    if not settings.reality_public_key:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Reality public key not configured",
+        )
+
+    public_key = normalize_reality_public_key(settings.reality_public_key)
+    public_key_b = (
+        normalize_reality_public_key(settings.reality_public_key_b)
+        if settings.reality_sni_b_enabled and settings.reality_public_key_b
+        else None
+    )
+
+    sid = settings.reality_common_short_id
+
+    links: list[KeyLinkProfile] = []
+
+    links.append(
+        KeyLinkProfile(
+            profile="vless_tcp_443",
+            link=build_vless_link_with_transport(
+                uuid=key.uuid,  # type: ignore
+                short_id=sid,
+                server_address=settings.domain,
+                port=settings.reality_port,
+                sni=settings.reality_sni,
+                fingerprint=settings.reality_fingerprint,
+                public_key=public_key,
+                flow=settings.reality_flow,
+                transport="tcp",
+                path="/",
+                remark="vless_tcp_443",
+            ),
+        )
+    )
+
+    links.append(
+        KeyLinkProfile(
+            profile="vless_tcp_alt",
+            link=build_vless_link_with_transport(
+                uuid=key.uuid,  # type: ignore
+                short_id=sid,
+                server_address=settings.domain,
+                port=settings.reality_alt_port_tcp,
+                sni=settings.reality_sni,
+                fingerprint=settings.reality_fingerprint,
+                public_key=public_key,
+                flow=settings.reality_flow,
+                transport="tcp",
+                path="/",
+                remark="vless_tcp_alt",
+            ),
+        )
+    )
+
+    links.append(
+        KeyLinkProfile(
+            profile="vless_xhttp",
+            link=build_vless_link_with_transport(
+                uuid=key.uuid,  # type: ignore
+                short_id=sid,
+                server_address=settings.domain,
+                port=settings.reality_xhttp_port,
+                sni=settings.reality_sni,
+                fingerprint=settings.reality_fingerprint,
+                public_key=public_key,
+                transport="xhttp",
+                path=settings.reality_xhttp_path,
+                remark="vless_xhttp",
+            ),
+        )
+    )
+
+    links.append(
+        KeyLinkProfile(
+            profile="trojan_tcp",
+            link=build_trojan_reality_link(
+                password=key.uuid,  # type: ignore
+                server_address=settings.domain,
+                port=settings.trojan_reality_port,
+                sni=settings.reality_sni,
+                fingerprint=settings.reality_fingerprint,
+                public_key=public_key,
+                short_id=sid,
+                path="/",
+                remark="trojan_tcp",
+            ),
+        )
+    )
+
+    if public_key_b and settings.reality_sni_b:
+        links.append(
+            KeyLinkProfile(
+                profile="vless_tcp_443_sni_b",
+                link=build_vless_link_with_transport(
+                    uuid=key.uuid,  # type: ignore
+                    short_id=settings.reality_short_id_b,
+                    server_address=settings.domain,
+                    port=settings.reality_port_sni_b,
+                    sni=settings.reality_sni_b,
+                    fingerprint=settings.reality_fingerprint_b_value,
+                    public_key=public_key_b,
+                    flow=settings.reality_flow,
+                    transport="tcp",
+                    path="/",
+                    remark="vless_tcp_443_sni_b",
+                ),
+            )
+        )
+
+    return KeyLinksResponse(key_id=key.id, links=links)  # type: ignore
+
+
+@app.get(
+    "/api/keys/{identifier}/client-config",
+    tags=["Keys"],
+)
+async def get_client_config(
+    identifier: str,
+    token: str = Depends(verify_token),
+    db: Session = Depends(get_db),
+):
+    """
+    Готовый клиентский JSON-конфиг с несколькими профилями и автопереключением по пингу.
+    """
+    try:
+        uuid_value, key_id_value, is_uuid = parse_key_identifier(identifier)
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=str(e),
+        )
+
+    if is_uuid:
+        key = db.query(Key).filter(Key.uuid == uuid_value).first()
+    else:
+        key = db.query(Key).filter(Key.id == key_id_value).first()
+
+    if not key:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Key not found",
+        )
+
+    if not settings.reality_public_key:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Reality public key not configured",
+        )
+
+    public_key = normalize_reality_public_key(settings.reality_public_key)
+    public_key_b = None
+    if settings.reality_sni_b_enabled and settings.reality_public_key_b:
+        public_key_b = normalize_reality_public_key(settings.reality_public_key_b)
+
+    cfg = build_client_config(
+        key_id=int(key.id),  # type: ignore
+        uuid=str(key.uuid),  # type: ignore
+        public_key=public_key,
+        public_key_b=public_key_b,
+    )
+    return JSONResponse(content=cfg)
+
+
+@app.get(
+    "/api/keys/{identifier}/subscription",
+    tags=["Keys"],
+)
+async def get_key_subscription(
+    identifier: str,
+    token: str = Depends(verify_token),
+    db: Session = Depends(get_db),
+    format: str = "base64",
+    profiles: str = "auto",
+):
+    """
+    Подписка с несколькими профилями и автовыбором.
+
+    profiles:
+    - auto (по умолчанию): 448/446/447/443 — безопасный набор для мобильных + автоподбор
+    - happ: как auto (совместимость)
+    - primary / stable / all: наборы ссылок без sing-box urltest
+
+    format:
+    - base64 / plain: список vless:// (клиент сам выбирает по ping)
+    - singbox / happ_json: JSON sing-box с urltest (рекомендуется для Happ)
+    - singbox_b64: base64(JSON) — URL подписки для Happ «добавить по ссылке»
+    """
+    try:
+        uuid_value, key_id_value, is_uuid = parse_key_identifier(identifier)
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=str(e),
+        )
+
+    if is_uuid:
+        key = db.query(Key).filter(Key.uuid == uuid_value).first()
+    else:
+        key = db.query(Key).filter(Key.id == key_id_value).first()
+
+    if not key:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Key not found",
+        )
+    if not settings.reality_public_key:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Reality public key not configured",
+        )
+
+    public_key = normalize_reality_public_key(settings.reality_public_key)
+    public_key_b = None
+    if settings.reality_sni_b_enabled and settings.reality_public_key_b:
+        public_key_b = normalize_reality_public_key(settings.reality_public_key_b)
+    uid = str(key.uuid)  # type: ignore
+
+    if profiles in ("auto", "happ"):
+        lines = build_auto_subscription_links(
+            uuid=uid, public_key=public_key, public_key_b=public_key_b
+        )
+    else:
+        links_resp = await get_key_links(identifier=identifier, token=token, db=db)
+        profile_filter: dict[str, set[str]] = {
+            "primary": {"vless_tcp_443"},
+            "stable": {"vless_tcp_443", "vless_tcp_alt"},
+            "all": {
+                "vless_tcp_443",
+                "vless_tcp_alt",
+                "vless_xhttp",
+                "trojan_tcp",
+                "vless_tcp_443_sni_b",
+            },
+        }
+        allowed = profile_filter.get(profiles)
+        if allowed is None:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="Invalid profiles. Use 'auto', 'happ', 'primary', 'stable', or 'all'.",
+            )
+        lines = [x.link for x in links_resp.links if x.profile in allowed]
+
+    if not lines:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="No links matched the requested profile set",
+        )
+
+    if format in ("singbox", "happ_json"):
+        cfg = build_auto_singbox_subscription_config(
+            uuid=uid, public_key=public_key, public_key_b=public_key_b
+        )
+        return JSONResponse(content=cfg)
+
+    if format == "singbox_b64":
+        cfg = build_auto_singbox_subscription_config(
+            uuid=uid, public_key=public_key, public_key_b=public_key_b
+        )
+        raw = json.dumps(cfg, ensure_ascii=False, separators=(",", ":"))
+        b64 = base64.b64encode(raw.encode("utf-8")).decode("ascii")
+        return Response(content=b64, media_type="text/plain; charset=utf-8")
+
+    payload = "\n".join(lines) + "\n"
+
+    if format == "plain":
+        return Response(content=payload, media_type="text/plain; charset=utf-8")
+
+    if format != "base64":
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Invalid format. Use 'base64', 'plain', 'singbox', 'singbox_b64', or 'happ_json'.",
+        )
+
+    b64 = base64.b64encode(payload.encode("utf-8")).decode("ascii")
+    return Response(content=b64, media_type="text/plain; charset=utf-8")
+
+
+@app.get(
+    "/api/keys/{identifier}/happ-config",
+    tags=["Keys"],
+)
+async def get_happ_config(
+    identifier: str,
+    token: str = Depends(verify_token),
+    db: Session = Depends(get_db),
+):
+    """
+    sing-box JSON для Happ (iOS): DNS через proxy, порт 448 без Vision-flow.
+    Импорт в Happ: Профиль → Импорт → из буфера / файла JSON.
+    """
+    try:
+        uuid_value, key_id_value, is_uuid = parse_key_identifier(identifier)
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=str(e),
+        )
+
+    if is_uuid:
+        key = db.query(Key).filter(Key.uuid == uuid_value).first()
+    else:
+        key = db.query(Key).filter(Key.id == key_id_value).first()
+
+    if not key:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Key not found",
+        )
+
+    if not settings.reality_public_key:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Reality public key not configured",
+        )
+
+    public_key = normalize_reality_public_key(settings.reality_public_key)
+    cfg = build_happ_singbox_config(uuid=str(key.uuid), public_key=public_key)  # type: ignore
+    return JSONResponse(content=cfg)
 
 
 @app.delete("/api/keys/uuid/{uuid}", response_model=KeyDeleteResponse, tags=["Keys"])
