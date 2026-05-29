@@ -131,6 +131,16 @@ class Settings(BaseSettings):
             tags.append(self.xray_vless_reality_sni_b_inbound_tag)
         return tags
 
+    def vless_inbound_tags_without_flow(self) -> List[str]:
+        """Inbounds для Happ / mobile: клиент без Vision-flow."""
+        tags = [
+            self.xray_vless_reality_happ_inbound_tag,
+            self.xray_vless_reality_alt_inbound_tag,
+        ]
+        if self.reality_sni_b_enabled:
+            tags.append(self.xray_vless_reality_sni_b_inbound_tag)
+        return tags
+
     def all_user_inbound_tags(self) -> List[str]:
         return self.vless_inbound_tags() + [self.xray_trojan_reality_inbound_tag]
 

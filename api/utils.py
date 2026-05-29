@@ -629,19 +629,6 @@ def build_auto_subscription_links(
             path="/",
             remark="auto_446",
         ),
-        build_vless_link_with_transport(
-            uuid=uuid,
-            short_id=sid,
-            server_address=settings.domain,
-            port=settings.reality_port,
-            sni=settings.reality_sni,
-            fingerprint="chrome",
-            public_key=public_key,
-            flow=settings.reality_flow,
-            transport="tcp",
-            path="/",
-            remark="auto_443",
-        ),
     ]
     if public_key_b and settings.reality_sni_b:
         lines.append(

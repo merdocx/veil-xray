@@ -260,7 +260,7 @@ class XrayConfigManager:
                 for inbound in vless_inbounds:
                     use_flow = (
                         inbound.get("tag")
-                        != settings.xray_vless_reality_happ_inbound_tag
+                        not in settings.vless_inbound_tags_without_flow()
                     )
                     if self._add_client_in_config(
                         inbound, uuid, email, use_flow=use_flow
@@ -349,7 +349,7 @@ class XrayConfigManager:
             added_any = False
             for inbound in vless_inbounds:
                 use_flow = (
-                    inbound.get("tag") != settings.xray_vless_reality_happ_inbound_tag
+                    inbound.get("tag") not in settings.vless_inbound_tags_without_flow()
                 )
                 if self._add_client_in_config(inbound, uuid, email, use_flow=use_flow):
                     added_any = True
