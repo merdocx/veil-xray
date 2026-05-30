@@ -321,7 +321,11 @@ class XrayConfigManager:
             return False
 
     def add_user_to_config(
-        self, uuid: str, short_id: str, email: Optional[str] = None, reload: bool = False
+        self,
+        uuid: str,
+        short_id: str,
+        email: Optional[str] = None,
+        reload: bool = False,
     ) -> bool:
         """
         Добавление пользователя в конфигурацию Xray
