@@ -41,7 +41,7 @@ sudo apt-get install -y \
   git curl ca-certificates \
   python3 python3-pip python3-venv \
   nginx certbot python3-certbot-nginx \
-  dnsutils
+  dnsutils sqlite3 rsync
 ```
 
 Настройка firewall (если используете UFW):
@@ -50,6 +50,11 @@ sudo apt-get install -y \
 sudo ufw allow OpenSSH
 sudo ufw allow 80/tcp
 sudo ufw allow 443/tcp
+sudo ufw allow 446/tcp    # VLESS alt
+sudo ufw allow 447/tcp    # SNI-B
+sudo ufw allow 448/tcp    # Happ (без Vision)
+sudo ufw allow 8445/tcp   # XHTTP
+sudo ufw allow 2085/tcp   # Trojan Reality
 # если API будет на 8443 (когда 443 занят Xray), откройте и этот порт:
 # sudo ufw allow 8443/tcp
 sudo ufw enable
@@ -118,7 +123,9 @@ XRAY_API_PORT=10085
 
 **Пример в репозитории** ([xray/config.example.json](xray/config.example.json)): SOCKS на релей + routing; на части prod-узлов — WG (см. [SERVER_PROFILE](docs/operations/SERVER_PROFILE.md)). Edge-узлы часто работают только с **`direct`**. Split RU: [routing-split-ru-restore.md](docs/operations/routing-split-ru-restore.md).
 
-**Ключи Reality в примере:** в `config.example.json` указаны ключи в формате, пригодном для `xray -test`; для продакшена сгенерируйте свои (`xray x25519`) и подставьте вместо значений из примера.
+**Ключи Reality:** сгенерируйте `python scripts/init_reality_keys.py`, добавьте в `.env`, подставьте в Xray: `scripts/ops/apply-reality-keys-to-xray-config.sh` (сначала placeholder `_B`, затем основной — иначе ключи повредятся). Проверка: `xray x25519 -i "$REALITY_PRIVATE_KEY"` → `Password (PublicKey)` = `REALITY_PUBLIC_KEY`.
+
+**Reality dest:** `REALITY_DEST` должен отвечать с VPS (`curl -sS --max-time 5 https://…`). Если `www.microsoft.com` недоступен — используйте `cloudflare.com` / `www.cloudflare.com:443`. Подробнее: [docs/operations/FIRST_DEPLOY.md](docs/operations/FIRST_DEPLOY.md).
 
 1. Установите Xray-core согласно [официальной документации](https://xtls.github.io/)
 2. Скопируйте `xray/config.example.json` в `/usr/local/etc/xray/config.json`

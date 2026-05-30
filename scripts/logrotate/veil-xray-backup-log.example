@@ -1,7 +1,7 @@
 # Install: sudo cp veil-xray-backup-log.example /etc/logrotate.d/veil-xray-backup-log
 # Adjust path if project is not in /root/veil-xray
 
-/root/veil-xray/logs/backup.log {
+/opt/veil-xray/logs/backup.log {
     monthly
     rotate 12
     compress

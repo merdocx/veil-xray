@@ -1,3 +1,19 @@
+## [1.3.19] - 2026-05-30
+
+### Добавлено
+- [docs/operations/FIRST_DEPLOY.md](docs/operations/FIRST_DEPLOY.md) — чеклист первого деплоя (UFW, Reality dest, veilbot).
+- `scripts/ops/apply-reality-keys-to-xray-config.sh` — безопасная подстановка Reality-ключей в `config.json` (сначала `_B`).
+
+### Изменено
+- README: пакеты `sqlite3`/`rsync`, UFW для портов 446–448/8445/2085, проверка `REALITY_DEST`, скрипт ключей.
+- `.env.example`: SNI/dest по умолчанию `cloudflare.com` (если `microsoft.com` недоступен с VPS).
+- `deploy-prod.sh`: logrotate для `backup.log`, `systemctl enable veil-xray-api`, предупреждение про `sqlite3`.
+- `logrotate/veil-xray-backup-log.example`: путь `/opt/veil-xray/logs/backup.log`.
+
+### Эксплуатация (проверено на prod)
+- Создание/удаление ключей через API без рестарта Xray (`adu`/`rmu`).
+- veilbot + Happ: одна ссылка `:448` + опционально sing-box urltest (SNI-B).
+
 ## [1.3.18] - 2026-05-29
 
 ### Документация

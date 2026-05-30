@@ -66,6 +66,13 @@ echo "==> logrotate"
 if [[ -f "${PROD}/scripts/load-protection/logrotate-veil-ops.example" ]]; then
   install -m 644 "${PROD}/scripts/load-protection/logrotate-veil-ops.example" /etc/logrotate.d/veil-ops
 fi
+if [[ -f "${PROD}/scripts/logrotate/veil-xray-backup-log.example" ]]; then
+  install -m 644 "${PROD}/scripts/logrotate/veil-xray-backup-log.example" /etc/logrotate.d/veil-xray-backup-log
+fi
+
+if ! command -v sqlite3 >/dev/null 2>&1; then
+  echo "WARN: sqlite3 not found — install for backup_database.sh: apt-get install -y sqlite3" >&2
+fi
 
 echo "==> cron (runtime ${PROD})"
 VEIL_PROD_DIR="$PROD" "${PROD}/scripts/ops/install-ops-cron.sh"
@@ -95,6 +102,7 @@ echo "==> systemd units"
 if [[ -f "${PROD}/scripts/veil-xray-api.service" ]]; then
   install -m 644 "${PROD}/scripts/veil-xray-api.service" /etc/systemd/system/veil-xray-api.service
   systemctl daemon-reload
+  systemctl enable veil-xray-api 2>/dev/null || true
 fi
 
 echo "==> restart veil-xray-api (${PROD})"
