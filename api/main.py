@@ -43,6 +43,7 @@ from api.models import (
     TrafficResetResponse,
     XraySyncStartResponse,
     XraySyncStatusResponse,
+    BotBundleResponse,
 )
 from api.xray_client import XrayClient
 from api.xray_config import XrayConfigManager
@@ -57,8 +58,11 @@ from api.utils import (
     normalize_reality_public_key,
     build_client_config,
     build_happ_singbox_config,
+    build_happ_xray_client_config,
     build_auto_subscription_links,
     build_auto_singbox_subscription_config,
+    build_ru_subscription_links,
+    build_ru_singbox_subscription_config,
 )
 from config.settings import settings
 
@@ -1083,14 +1087,19 @@ async def get_traffic(
 
 @app.get("/api/keys/{identifier}/link", response_model=VlessLinkResponse, tags=["Keys"])
 async def get_vless_link(
-    identifier: str, token: str = Depends(verify_token), db: Session = Depends(get_db)
+    identifier: str,
+    token: str = Depends(verify_token),
+    db: Session = Depends(get_db),
+    profile: str = "primary",
 ):
     """
     Получение готовой VLESS ссылки для импорта в клиент
     Поддерживает оба формата: /api/keys/{uuid}/link и /api/keys/{key_id}/link
 
-    - Формирует ссылку с оптимизацией для v2raytun
-    - Включает все необходимые параметры Reality
+    profile:
+    - primary (по умолчанию): tcp:443 + Vision flow
+    - happ / auto: tcp:448 без flow (рекомендуется для Happ на iOS)
+    - ru: XHTTP :8445 + Vision (для пользователей в РФ)
     """
     try:
         # Определяем тип идентификатора (UUID или key_id)
@@ -1140,19 +1149,51 @@ async def get_vless_link(
             # Если не удалось конвертировать, используем как есть
             pass
 
-        # Построение VLESS (основной профиль: tcp:443)
         common_short_id = settings.reality_common_short_id
-        vless_link = build_vless_link(
-            uuid=key.uuid,  # type: ignore
-            short_id=common_short_id,  # Используем общий short_id из настроек
-            server_address=settings.domain,
-            port=settings.reality_port,
-            sni=settings.reality_sni,
-            fingerprint=settings.reality_fingerprint,
-            public_key=public_key,  # Используем URL-safe формат
-            dest="vless_tcp_443",
-            flow=settings.reality_flow,
-        )
+        server = settings.domain
+        if "." not in server or server.endswith(".ru"):
+            server = "38.244.134.230"
+
+        if profile in ("happ", "auto"):
+            vless_link = build_vless_link_with_transport(
+                uuid=str(key.uuid),  # type: ignore
+                short_id=common_short_id,
+                server_address=server,
+                port=settings.reality_happ_port_tcp,
+                sni=settings.reality_sni,
+                fingerprint="ios",
+                public_key=public_key,
+                flow="",
+                transport="tcp",
+                path="/",
+                remark="Казахстан",
+            )
+        elif profile == "ru":
+            vless_link = build_vless_link_with_transport(
+                uuid=str(key.uuid),  # type: ignore
+                short_id=common_short_id,
+                server_address=server,
+                port=settings.reality_xhttp_port,
+                sni=settings.reality_sni,
+                fingerprint=settings.reality_fingerprint,
+                public_key=public_key,
+                flow=settings.reality_flow,
+                transport="xhttp",
+                path=settings.reality_xhttp_path,
+                remark="RU-xhttp",
+            )
+        else:
+            vless_link = build_vless_link(
+                uuid=key.uuid,  # type: ignore
+                short_id=common_short_id,
+                server_address=settings.domain,
+                port=settings.reality_port,
+                sni=settings.reality_sni,
+                fingerprint=settings.reality_fingerprint,
+                public_key=public_key,
+                dest="vless_tcp_443",
+                flow=settings.reality_flow,
+            )
 
         return VlessLinkResponse(key_id=key.id, vless_link=vless_link)  # type: ignore
 
@@ -1664,14 +1705,14 @@ async def get_key_subscription(
     Подписка с несколькими профилями и автовыбором.
 
     profiles:
-    - auto (по умолчанию): 448/446/447/443 — безопасный набор для мобильных + автоподбор
-    - happ: как auto (совместимость)
-    - primary / stable / all: наборы ссылок без sing-box urltest
+    - auto / happ: одна ссылка :448 (Happ/iOS)
+    - ru: XHTTP + :448 fallback; sing-box с XHTTP при format=singbox*
+    - primary / stable / all: наборы ссылок
 
     format:
-    - base64 / plain: список vless:// (клиент сам выбирает по ping)
-    - singbox / happ_json: JSON sing-box с urltest (рекомендуется для Happ)
-    - singbox_b64: base64(JSON) — URL подписки для Happ «добавить по ссылке»
+    - base64 / plain: список vless://
+    - singbox / happ_json / singbox_b64: sing-box TUN (рекомендуется для Happ)
+    - xray / xray_json: Xray JSON с DNS
     """
     try:
         uuid_value, key_id_value, is_uuid = parse_key_identifier(identifier)
@@ -1707,6 +1748,8 @@ async def get_key_subscription(
         lines = build_auto_subscription_links(
             uuid=uid, public_key=public_key, public_key_b=public_key_b
         )
+    elif profiles == "ru":
+        lines = build_ru_subscription_links(uuid=uid, public_key=public_key)
     else:
         links_resp = await get_key_links(identifier=identifier, token=token, db=db)
         profile_filter: dict[str, set[str]] = {
@@ -1724,9 +1767,13 @@ async def get_key_subscription(
         if allowed is None:
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                detail="Invalid profiles. Use 'auto', 'happ', 'primary', 'stable', or 'all'.",
+                detail="Invalid profiles. Use 'auto', 'happ', 'ru', 'primary', 'stable', or 'all'.",
             )
         lines = [x.link for x in links_resp.links if x.profile in allowed]
+
+    singbox_builder = build_auto_singbox_subscription_config
+    if profiles == "ru":
+        singbox_builder = build_ru_singbox_subscription_config
 
     if not lines:
         raise HTTPException(
@@ -1735,15 +1782,23 @@ async def get_key_subscription(
         )
 
     if format in ("singbox", "happ_json"):
-        cfg = build_auto_singbox_subscription_config(
-            uuid=uid, public_key=public_key, public_key_b=public_key_b
-        )
+        cfg = singbox_builder(uuid=uid, public_key=public_key)
         return JSONResponse(content=cfg)
 
     if format == "singbox_b64":
-        cfg = build_auto_singbox_subscription_config(
-            uuid=uid, public_key=public_key, public_key_b=public_key_b
+        cfg = singbox_builder(uuid=uid, public_key=public_key)
+        raw = json.dumps(cfg, ensure_ascii=False, separators=(",", ":"))
+        b64 = base64.b64encode(raw.encode("utf-8")).decode("ascii")
+        return Response(content=b64, media_type="text/plain; charset=utf-8")
+
+    if format in ("xray", "xray_json"):
+        cfg = build_happ_xray_client_config(
+            key_id=int(key.id),  # type: ignore
+            uuid=uid,
+            public_key=public_key,
         )
+        if format == "xray_json":
+            return JSONResponse(content=cfg)
         raw = json.dumps(cfg, ensure_ascii=False, separators=(",", ":"))
         b64 = base64.b64encode(raw.encode("utf-8")).decode("ascii")
         return Response(content=b64, media_type="text/plain; charset=utf-8")
@@ -1756,7 +1811,7 @@ async def get_key_subscription(
     if format != "base64":
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="Invalid format. Use 'base64', 'plain', 'singbox', 'singbox_b64', or 'happ_json'.",
+            detail="Invalid format. Use 'base64', 'plain', 'singbox', 'singbox_b64', 'happ_json', 'xray', or 'xray_json'.",
         )
 
     b64 = base64.b64encode(payload.encode("utf-8")).decode("ascii")
@@ -1771,10 +1826,13 @@ async def get_happ_config(
     identifier: str,
     token: str = Depends(verify_token),
     db: Session = Depends(get_db),
+    format: str = "singbox",
 ):
     """
-    sing-box JSON для Happ (iOS): DNS через proxy, порт 448 без Vision-flow.
-    Импорт в Happ: Профиль → Импорт → из буфера / файла JSON.
+    Профиль для Happ (iOS).
+
+    format=singbox (по умолчанию): sing-box TUN + DNS через proxy (рекомендуется).
+    format=xray: Xray JSON, один outbound :448, DNS + FakeDNS.
     """
     try:
         uuid_value, key_id_value, is_uuid = parse_key_identifier(identifier)
@@ -1802,8 +1860,79 @@ async def get_happ_config(
         )
 
     public_key = normalize_reality_public_key(settings.reality_public_key)
-    cfg = build_happ_singbox_config(uuid=str(key.uuid), public_key=public_key)  # type: ignore
+    uid = str(key.uuid)  # type: ignore
+    if format in ("singbox", "sing-box"):
+        cfg = build_happ_singbox_config(uuid=uid, public_key=public_key)
+    elif format not in ("xray", ""):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Invalid format. Use 'xray' or 'singbox'.",
+        )
+    else:
+        cfg = build_happ_xray_client_config(
+            key_id=int(key.id),  # type: ignore
+            uuid=uid,
+            public_key=public_key,
+        )
     return JSONResponse(content=cfg)
+
+
+@app.get(
+    "/api/keys/{identifier}/bot-bundle",
+    response_model=BotBundleResponse,
+    tags=["Keys"],
+)
+async def get_bot_bundle(
+    identifier: str,
+    token: str = Depends(verify_token),
+    db: Session = Depends(get_db),
+):
+    """
+    Единый ответ для veilbot: VLESS Happ (:448) + sing-box подписка (base64).
+    Создание/удаление ключа — hot-add через Xray API, без restart.
+    """
+    try:
+        uuid_value, key_id_value, is_uuid = parse_key_identifier(identifier)
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=str(e),
+        )
+
+    if is_uuid:
+        key = db.query(Key).filter(Key.uuid == uuid_value).first()
+    else:
+        key = db.query(Key).filter(Key.id == key_id_value).first()
+
+    if not key:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Key not found",
+        )
+    if not settings.reality_public_key:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Reality public key not configured",
+        )
+
+    public_key = normalize_reality_public_key(settings.reality_public_key)
+    uid = str(key.uuid)  # type: ignore
+    kid = int(key.id)  # type: ignore
+
+    vless_happ = build_auto_subscription_links(uuid=uid, public_key=public_key)[0]
+    singbox_cfg = build_auto_singbox_subscription_config(
+        uuid=uid, public_key=public_key, public_key_b=None
+    )
+    singbox_raw = json.dumps(singbox_cfg, ensure_ascii=False, separators=(",", ":"))
+    singbox_b64 = base64.b64encode(singbox_raw.encode("utf-8")).decode("ascii")
+
+    return BotBundleResponse(
+        key_id=kid,
+        uuid=uid,
+        vless_happ=vless_happ,
+        subscription_singbox_b64=singbox_b64,
+        singbox=singbox_cfg,
+    )
 
 
 @app.delete("/api/keys/uuid/{uuid}", response_model=KeyDeleteResponse, tags=["Keys"])

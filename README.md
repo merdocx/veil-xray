@@ -258,7 +258,7 @@ curl https://api.your-domain.com/
 #### Сценарий, если `443` уже занят Xray
 
 Если `443/tcp` занят Xray для VLESS+Reality, размещайте API на отдельном HTTPS порту (например, `8443`) через Nginx.
-Для такого варианта ориентируйтесь на runbook: `/.cursor/plans/ubuntu_rsync_no-git_ef1cf90a.plan.md` (блок `Nginx + HTTPS для API на 8443`).
+Для такого варианта используйте шаблон [scripts/nginx-api-prod-http-ip.conf](scripts/nginx-api-prod-http-ip.conf) (API на `:8443`, когда `:443` занят Xray) — см. [HTTPS_SETUP.md](HTTPS_SETUP.md).
 
 **Проверка настройки:**
 - API доступен по HTTPS: `https://api.your-domain.com`

@@ -3,7 +3,7 @@
 set -euo pipefail
 
 LOG="${VEIL_XRAY_RESTART_LOG:-/var/log/veil-xray-restart.log}"
-REPO="${VEIL_REPO_DIR:-/root/veil-xray}"
+REPO="${VEIL_PROD_DIR:-${VEIL_REPO_DIR:-/opt/veil-xray}}"
 TS="$(date -Iseconds)"
 
 {

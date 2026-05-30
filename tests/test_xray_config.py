@@ -175,14 +175,17 @@ def test_test_config_xray_not_found(mock_exists, config_manager, sample_config):
 
 def test_add_user_to_config(config_manager, sample_config):
     """Тест добавления пользователя в конфигурацию"""
+    from unittest.mock import patch
     from config.settings import settings
 
     # Убеждаемся, что общий short_id добавлен в конфигурацию перед тестом
     config_manager.ensure_common_short_id(settings.reality_common_short_id)
 
-    result = config_manager.add_user_to_config(
-        uuid="test-uuid-123", short_id="abcd1234", email="test@example.com"
-    )
+    with patch.object(config_manager, "reload_config") as reload_mock:
+        result = config_manager.add_user_to_config(
+            uuid="test-uuid-123", short_id="abcd1234", email="test@example.com"
+        )
+        reload_mock.assert_not_called()
     assert result is True
 
     config = config_manager.load_config()

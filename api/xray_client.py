@@ -126,7 +126,7 @@ class XrayClient:
             "protocol": "vless",
             "port": settings.reality_alt_port_tcp,
             "settings": {
-                "clients": [{"id": uuid, "flow": flow_val, "email": email}],
+                "clients": [{"id": uuid, "email": email}],
                 "decryption": "none",
             },
         }
@@ -168,7 +168,7 @@ class XrayClient:
                     "protocol": "vless",
                     "port": settings.reality_port_sni_b,
                     "settings": {
-                        "clients": [{"id": uuid, "flow": flow_val, "email": email}],
+                        "clients": [{"id": uuid, "email": email}],
                         "decryption": "none",
                     },
                 }

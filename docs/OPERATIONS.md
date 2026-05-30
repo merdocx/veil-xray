@@ -1,8 +1,21 @@
 # Эксплуатация: сервисы, логи, автозапуск, мониторинг
 
-Сводка для продакшена. Путь проекта: `/root/veil-xray`.
+Сводка для продакшена.
 
-**Эталон:** [operations/SERVER_PROFILE.md](operations/SERVER_PROFILE.md) · **Рекомендуемые значения:** [operations/RECOMMENDED_SETTINGS.md](operations/RECOMMENDED_SETTINGS.md) (v1.3.18).
+| Путь | Назначение |
+|------|------------|
+| `/root/veil-xray` | Git-репозиторий, правки, `git pull` |
+| `/opt/veil-xray` | **Runtime:** API (systemd), SQLite, `.env`, venv, логи, бэкапы |
+
+Деплой: `scripts/ops/deploy-prod.sh` — pull в `/root`, `rsync` в `/opt`, restart API.
+
+**Эталон:** [operations/SERVER_PROFILE.md](operations/SERVER_PROFILE.md) · **Рекомендуемые значения:** [operations/RECOMMENDED_SETTINGS.md](operations/RECOMMENDED_SETTINGS.md) (v1.3.18). **RU-мост:** [operations/ru-bridge-chain.md](operations/ru-bridge-chain.md).
+
+## API: ключи без перезагрузки Xray
+
+- `POST /api/keys` / `DELETE /api/keys/{id}` — hot-add через `xray api adu` / `rmu` + запись в `config.json` **без** `systemctl restart`.
+- `GET /api/keys/{id}/bot-bundle` — для veilbot: `vless_happ` + `subscription_singbox_b64`.
+- `POST /api/system/xray/sync-config` — только repair (не после каждого ключа); в peak hours MSK по умолчанию 503.
 
 ## Автозапуск (systemd)
 

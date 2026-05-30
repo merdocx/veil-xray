@@ -1,6 +1,10 @@
 """Тесты генерации client-config."""
 
-from api.utils import build_client_config
+from api.utils import (
+    build_client_config,
+    build_ru_singbox_subscription_config,
+    build_auto_subscription_links,
+)
 from config.settings import settings
 
 
@@ -53,3 +57,24 @@ def test_build_client_config_includes_sni_b(monkeypatch):
     ]
     assert "fast_vless_tcp_sni_b" in proxy_tags
     assert len(proxy_tags) == 5
+
+
+def test_build_auto_subscription_single_happ_port(monkeypatch):
+    monkeypatch.setattr(settings, "domain", "38.244.134.230")
+    links = build_auto_subscription_links(
+        uuid="00000000-0000-4000-8000-000000000099",
+        public_key="pk_test",
+    )
+    assert len(links) == 1
+    assert ":448" in links[0]
+
+
+def test_build_ru_singbox_xhttp_outbound(monkeypatch):
+    monkeypatch.setattr(settings, "domain", "38.244.134.230")
+    cfg = build_ru_singbox_subscription_config(
+        uuid="00000000-0000-4000-8000-000000000099",
+        public_key="pk_test",
+    )
+    assert cfg["inbounds"][0]["type"] == "tun"
+    proxy = next(o for o in cfg["outbounds"] if o.get("tag") == "proxy")
+    assert proxy["transport"]["type"] == "xhttp"

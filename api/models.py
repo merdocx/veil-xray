@@ -96,6 +96,16 @@ class XraySyncStartResponse(BaseModel):
     message: str
 
 
+class BotBundleResponse(BaseModel):
+    """Набор конфигов для veilbot за один запрос."""
+
+    key_id: int
+    uuid: str
+    vless_happ: str
+    subscription_singbox_b64: str
+    singbox: dict
+
+
 class XraySyncStatusResponse(BaseModel):
     """Статус фоновой синхронизации пользователей Xray."""
 

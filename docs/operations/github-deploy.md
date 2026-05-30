@@ -48,6 +48,7 @@ cd /root/veil-xray
 cd /root/veil-xray
 /root/veil-xray/scripts/ops/git-with-credentials.sh pull --ff-only origin main
 /root/veil-xray/scripts/ops/deploy-prod.sh
+# deploy-prod: git pull в /root/veil-xray → rsync в /opt/veil-xray → restart API
 ```
 
 `deploy-prod.sh` применяет sysctl, cron, **policy recommended** (если отличается от эталона), перезапускает API.  

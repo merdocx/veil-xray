@@ -13,5 +13,6 @@
 | [operations/RECOMMENDED_SETTINGS.md](operations/RECOMMENDED_SETTINGS.md) | **Рекомендуемые policy, SLO, routing, деплой** |
 | [operations/load-protection/](operations/load-protection/) | SLO, baseline, policy Xray, systemd, stress-mode |
 | [operations/routing-split-ru-restore.md](operations/routing-split-ru-restore.md) | Опционально: split RU/foreign (geoip/geosite) |
+| [operations/ru-bridge-chain.md](operations/ru-bridge-chain.md) | **RU-мост → egress:** схема, API, пошаговая настройка |
 | [../scripts/BACKUP_AND_LOGGING.md](../scripts/BACKUP_AND_LOGGING.md) | Бэкапы SQLite и логирование API |
 | [../scripts/load-protection/README.md](../scripts/load-protection/README.md) | Скрипты baseline и stress-mode |

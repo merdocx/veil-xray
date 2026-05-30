@@ -321,7 +321,7 @@ class XrayConfigManager:
             return False
 
     def add_user_to_config(
-        self, uuid: str, short_id: str, email: Optional[str] = None, reload: bool = True
+        self, uuid: str, short_id: str, email: Optional[str] = None, reload: bool = False
     ) -> bool:
         """
         Добавление пользователя в конфигурацию Xray
@@ -330,7 +330,7 @@ class XrayConfigManager:
             uuid: UUID пользователя
             short_id: Short ID пользователя (не используется, оставлен для совместимости)
             email: Email/идентификатор пользователя (опционально)
-            reload: Перезагрузить конфигурацию Xray после добавления (по умолчанию True, использует SIGHUP для graceful reload без прерывания соединений)
+            reload: Не используется (hot-add через Xray API). Оставлен для совместимости.
 
         Returns:
             True если успешно, False в противном случае
@@ -382,7 +382,7 @@ class XrayConfigManager:
             return False
 
     def remove_user_from_config(
-        self, uuid: str, short_id: str, reload: bool = True
+        self, uuid: str, short_id: str, reload: bool = False
     ) -> bool:
         """
         Удаление пользователя из конфигурации Xray

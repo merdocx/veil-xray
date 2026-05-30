@@ -251,9 +251,12 @@ def build_client_vless_tcp_outbound(
     fingerprint: str,
     public_key: str,
     short_id: str,
-    flow: str,
+    flow: str = "",
 ) -> dict[str, Any]:
     """VLESS+REALITY TCP outbound для client-config."""
+    user: dict[str, Any] = {"id": uuid, "encryption": "none"}
+    if flow:
+        user["flow"] = flow
     return {
         "protocol": "vless",
         "tag": tag,
@@ -262,13 +265,7 @@ def build_client_vless_tcp_outbound(
                 {
                     "address": domain,
                     "port": port,
-                    "users": [
-                        {
-                            "id": uuid,
-                            "encryption": "none",
-                            "flow": flow,
-                        }
-                    ],
+                    "users": [user],
                 }
             ]
         },
@@ -591,22 +588,39 @@ def _singbox_vless_outbound(
     }
 
 
-def build_auto_subscription_links(
+def _server_address_for_links() -> str:
+    server = settings.domain
+    if "." not in server or server.endswith(".ru"):
+        return "38.244.134.230"
+    return server
+
+
+def build_ru_subscription_links(
     *,
     uuid: str,
     public_key: str,
-    public_key_b: Optional[str] = None,
 ) -> list[str]:
-    """
-    Набор ссылок для подписки с автовыбором в клиенте (urltest / ping).
-    Без Trojan и XHTTP+flow — ломают Happ на iOS.
-    """
+    """Профиль РФ: XHTTP (основной) + :448 fallback для Happ."""
     sid = settings.reality_common_short_id
-    lines = [
+    server = _server_address_for_links()
+    return [
         build_vless_link_with_transport(
             uuid=uuid,
             short_id=sid,
-            server_address=settings.domain,
+            server_address=server,
+            port=settings.reality_xhttp_port,
+            sni=settings.reality_sni,
+            fingerprint=settings.reality_fingerprint,
+            public_key=public_key,
+            flow=settings.reality_flow,
+            transport="xhttp",
+            path=settings.reality_xhttp_path,
+            remark="RU-xhttp",
+        ),
+        build_vless_link_with_transport(
+            uuid=uuid,
+            short_id=sid,
+            server_address=server,
             port=settings.reality_happ_port_tcp,
             sni=settings.reality_sni,
             fingerprint="ios",
@@ -614,39 +628,98 @@ def build_auto_subscription_links(
             flow="",
             transport="tcp",
             path="/",
-            remark="auto_448",
+            remark="RU-happ448",
         ),
+    ]
+
+
+def _singbox_vless_xhttp_outbound(
+    *,
+    tag: str,
+    uuid: str,
+    public_key: str,
+    short_id: str,
+) -> dict[str, Any]:
+    server = _server_address_for_links()
+    return {
+        "type": "vless",
+        "tag": tag,
+        "server": server,
+        "server_port": settings.reality_xhttp_port,
+        "uuid": uuid,
+        "packet_encoding": "xudp",
+        "transport": {
+            "type": "xhttp",
+            "path": settings.reality_xhttp_path,
+            "mode": "stream-one",
+        },
+        "tls": {
+            "enabled": True,
+            "server_name": settings.reality_sni,
+            "utls": {
+                "enabled": True,
+                "fingerprint": settings.reality_fingerprint,
+            },
+            "reality": {
+                "enabled": True,
+                "public_key": public_key,
+                "short_id": short_id,
+            },
+        },
+    }
+
+
+def build_ru_singbox_subscription_config(
+    *,
+    uuid: str,
+    public_key: str,
+) -> dict[str, Any]:
+    """sing-box для РФ: XHTTP + TUN (без urltest)."""
+    sid = settings.reality_common_short_id
+    cfg = build_auto_singbox_subscription_config(
+        uuid=uuid, public_key=public_key, public_key_b=None
+    )
+    cfg["outbounds"] = [
+        _singbox_vless_xhttp_outbound(
+            tag="proxy",
+            uuid=uuid,
+            public_key=public_key,
+            short_id=sid,
+        ),
+        {"type": "direct", "tag": "direct"},
+        {"type": "dns", "tag": "dns-out"},
+        {"type": "block", "tag": "block"},
+    ]
+    return cfg
+
+
+def build_auto_subscription_links(
+    *,
+    uuid: str,
+    public_key: str,
+    public_key_b: Optional[str] = None,
+) -> list[str]:
+    """
+    Одна ссылка :448 для Happ — несколько ссылок в подписке заставляют Happ
+    собрать observatory/balancer с пустым DNS и «пинг есть, интернета нет».
+    """
+    sid = settings.reality_common_short_id
+    server = _server_address_for_links()
+    return [
         build_vless_link_with_transport(
             uuid=uuid,
             short_id=sid,
-            server_address=settings.domain,
-            port=settings.reality_alt_port_tcp,
+            server_address=server,
+            port=settings.reality_happ_port_tcp,
             sni=settings.reality_sni,
             fingerprint="ios",
             public_key=public_key,
             flow="",
             transport="tcp",
             path="/",
-            remark="auto_446",
+            remark="Казахстан",
         ),
     ]
-    if public_key_b and settings.reality_sni_b:
-        lines.append(
-            build_vless_link_with_transport(
-                uuid=uuid,
-                short_id=settings.reality_short_id_b,
-                server_address=settings.domain,
-                port=settings.reality_port_sni_b,
-                sni=settings.reality_sni_b,
-                fingerprint="ios",
-                public_key=public_key_b,
-                flow="",
-                transport="tcp",
-                path="/",
-                remark="auto_447",
-            )
-        )
-    return lines
 
 
 def build_auto_singbox_subscription_config(
@@ -659,10 +732,10 @@ def build_auto_singbox_subscription_config(
     sing-box профиль: несколько outbounds + urltest (автовыбор по задержке) для Happ/iOS.
     """
     sid = settings.reality_common_short_id
-    proxy_tags = ["auto_448", "auto_446"]
+    proxy_tags = ["proxy"]
     proxy_outbounds: list[dict[str, Any]] = [
         _singbox_vless_outbound(
-            tag="auto_448",
+            tag="proxy",
             uuid=uuid,
             port=settings.reality_happ_port_tcp,
             sni=settings.reality_sni,
@@ -670,36 +743,14 @@ def build_auto_singbox_subscription_config(
             public_key=public_key,
             short_id=sid,
         ),
-        _singbox_vless_outbound(
-            tag="auto_446",
-            uuid=uuid,
-            port=settings.reality_alt_port_tcp,
-            sni=settings.reality_sni,
-            fingerprint="ios",
-            public_key=public_key,
-            short_id=sid,
-        ),
     ]
-    if public_key_b and settings.reality_sni_b:
-        proxy_tags.append("auto_447")
-        proxy_outbounds.append(
-            _singbox_vless_outbound(
-                tag="auto_447",
-                uuid=uuid,
-                port=settings.reality_port_sni_b,
-                sni=settings.reality_sni_b,
-                fingerprint="ios",
-                public_key=public_key_b,
-                short_id=settings.reality_short_id_b,
-            )
-        )
 
     return {
         "log": {"disabled": False, "level": "warn"},
         "dns": {
             "servers": [
-                {"tag": "dns-proxy", "address": "8.8.8.8", "detour": "auto"},
-                {"tag": "dns-local", "address": "local"},
+                {"tag": "dns-proxy", "address": "1.1.1.1", "detour": "proxy"},
+                {"tag": "dns-local", "address": "local", "detour": "direct"},
                 {"tag": "fakeip", "address": "fakeip"},
             ],
             "rules": [{"query_type": ["A", "AAAA"], "server": "fakeip"}],
@@ -725,31 +776,104 @@ def build_auto_singbox_subscription_config(
             {"type": "direct", "tag": "direct"},
             {"type": "dns", "tag": "dns-out"},
             {"type": "block", "tag": "block"},
-            {
-                "type": "urltest",
-                "tag": "auto",
-                "outbounds": proxy_tags,
-                "url": "https://connectivitycheck.gstatic.com/generate_204",
-                "interval": "5m",
-                "tolerance": 100,
-            },
         ],
         "route": {
             "rules": [
                 {"protocol": "dns", "outbound": "dns-out"},
                 {"ip_is_private": True, "outbound": "direct"},
             ],
-            "final": "auto",
+            "final": "proxy",
             "auto_detect_interface": True,
         },
     }
 
 
 def build_happ_singbox_config(*, uuid: str, public_key: str) -> dict[str, Any]:
-    """Алиас: полный auto-профиль с urltest."""
+    """sing-box профиль с urltest (не все сборки Happ)."""
     public_key_b = None
     if settings.reality_sni_b_enabled and settings.reality_public_key_b:
         public_key_b = normalize_reality_public_key(settings.reality_public_key_b)
     return build_auto_singbox_subscription_config(
         uuid=uuid, public_key=public_key, public_key_b=public_key_b
     )
+
+
+def build_happ_xray_client_config(
+    *,
+    key_id: int,
+    uuid: str,
+    public_key: str,
+) -> dict[str, Any]:
+    """Xray JSON для Happ: outbound :448, DNS, без observatory/balancer."""
+    tag = "proxy-448"
+    server = _server_address_for_links()
+
+    return {
+        "remarks": "Казахстан",
+        "log": {"loglevel": "warning"},
+        "dns": {
+            "queryStrategy": "UseIPv4",
+            "disableCache": False,
+            "servers": [
+                "fakedns",
+                "1.1.1.1",
+                "8.8.8.8",
+            ],
+        },
+        "fakedns": [
+            {
+                "ipPool": "198.18.0.0/15",
+                "poolSize": 65535,
+            }
+        ],
+        "inbounds": [
+            {
+                "listen": "127.0.0.1",
+                "port": 10808,
+                "protocol": "socks",
+                "settings": {"auth": "noauth", "udp": True},
+                "sniffing": {
+                    "enabled": True,
+                    "routeOnly": True,
+                    "destOverride": ["http", "tls", "quic"],
+                },
+                "tag": "socks-in",
+            }
+        ],
+        "outbounds": [
+            build_client_vless_tcp_outbound(
+                tag=tag,
+                uuid=uuid,
+                domain=server,
+                port=settings.reality_happ_port_tcp,
+                sni=settings.reality_sni,
+                fingerprint="ios",
+                public_key=public_key,
+                short_id=settings.reality_common_short_id,
+                flow="",
+            ),
+            {"protocol": "freedom", "tag": "direct"},
+            {"protocol": "blackhole", "tag": "block"},
+        ],
+        "routing": {
+            "domainStrategy": "IPIfNonMatch",
+            "rules": [
+                {
+                    "type": "field",
+                    "ip": ["geoip:private"],
+                    "outboundTag": "direct",
+                },
+                {
+                    "type": "field",
+                    "network": "udp",
+                    "port": "53",
+                    "outboundTag": tag,
+                },
+                {
+                    "type": "field",
+                    "network": "tcp,udp",
+                    "outboundTag": tag,
+                },
+            ],
+        },
+    }

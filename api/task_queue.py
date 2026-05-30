@@ -185,9 +185,10 @@ class ConfigTaskQueue:
 
                 success = await asyncio.to_thread(
                     config_manager.add_user_to_config,
-                    uuid=task.uuid,
-                    short_id=task.short_id,
-                    email=task.email,
+                    task.uuid,
+                    task.short_id,
+                    task.email,
+                    False,
                 )
 
                 if success:
@@ -208,8 +209,9 @@ class ConfigTaskQueue:
 
                 success = await asyncio.to_thread(
                     config_manager.remove_user_from_config,
-                    uuid=task.uuid,
-                    short_id=task.short_id,
+                    task.uuid,
+                    task.short_id,
+                    False,
                 )
 
                 if success:
