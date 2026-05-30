@@ -11,6 +11,7 @@
 | [../xray/README.md](../xray/README.md) | Пример `config.example.json` и теги inbounds |
 | [operations/SERVER_PROFILE.md](operations/SERVER_PROFILE.md) | **Эталон лимитов и настроек prod (2 vCPU / 4 GiB)** |
 | [operations/RECOMMENDED_SETTINGS.md](operations/RECOMMENDED_SETTINGS.md) | **Рекомендуемые policy, SLO, routing, деплой** |
+| [operations/SERVER_REQUIREMENTS.md](operations/SERVER_REQUIREMENTS.md) | **Требования к VPS, мониторинг, автозапуск, logrotate** |
 | [operations/FIRST_DEPLOY.md](operations/FIRST_DEPLOY.md) | **Первый деплой на VPS (UFW, Reality, veilbot)** |
 | [operations/load-protection/](operations/load-protection/) | SLO, baseline, policy Xray, systemd, stress-mode |
 | [operations/routing-split-ru-restore.md](operations/routing-split-ru-restore.md) | Опционально: split RU/foreign (geoip/geosite) |

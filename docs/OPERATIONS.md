@@ -61,7 +61,7 @@ systemctl status xray veil-xray-api nginx --no-pager
 
 | Что | Где |
 |-----|-----|
-| Файл | `/root/veil-xray/logs/veil_xray_api.log` |
+| Файл | `/opt/veil-xray/logs/veil_xray_api.log` |
 | Ротация | Python: **10 MB** × **5** (`log_max_bytes`, `log_backup_count`) |
 | Journal | `journalctl -u veil-xray-api -f` |
 
@@ -74,6 +74,9 @@ journalctl -u xray -f
 ```
 
 ### Мониторинг нагрузки
+
+Быстрый статус: `scripts/ops/server-load-status.sh`.  
+Требования и пороги: [operations/SERVER_REQUIREMENTS.md](operations/SERVER_REQUIREMENTS.md).
 
 | Лог | Скрипт | Частота |
 |-----|--------|---------|

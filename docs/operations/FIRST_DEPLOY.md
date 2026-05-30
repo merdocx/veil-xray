@@ -88,3 +88,33 @@ systemctl is-active xray veil-xray-api nginx
 ```
 
 Создание/удаление ключа через API **не требует** `systemctl restart xray` (hot-add `adu` / `rmu`).
+
+## 8. Мониторинг загрузки
+
+```bash
+sudo /opt/veil-xray/scripts/ops/install-ops-cron.sh
+sudo /opt/veil-xray/scripts/ops/apply-slo-profile.sh auto   # 2g или 4g по RAM
+/opt/veil-xray/scripts/ops/server-load-status.sh
+```
+
+Логи: `/var/log/veil-baseline.log` (каждую минуту), `/var/log/veil-slo.log` (каждые 5 мин).  
+Подробно: [SERVER_REQUIREMENTS.md](SERVER_REQUIREMENTS.md#4-мониторинг-загрузки-сервера).
+
+## 9. Автозапуск
+
+```bash
+systemctl enable --now xray veil-xray-api nginx
+systemctl is-enabled xray veil-xray-api nginx
+```
+
+`deploy-prod.sh` включает `veil-xray-api`; Xray и Nginx — проверьте вручную на новом VPS.
+
+## 10. Ротация логов
+
+Устанавливается при `deploy-prod.sh`:
+
+- `/etc/logrotate.d/veil-ops` — SLO, baseline, restart-логи
+- `/etc/logrotate.d/veil-xray-backup-log` — `logs/backup.log`
+- `/etc/logrotate.d/veil-xray-api-log` — `logs/veil_xray_api.log` (+ встроенная ротация 10 MB×5 в API)
+
+Полная таблица: [SERVER_REQUIREMENTS.md](SERVER_REQUIREMENTS.md#6-ротация-логов).

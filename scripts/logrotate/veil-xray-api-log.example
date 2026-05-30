@@ -1,0 +1,12 @@
+# Install: deploy-prod.sh or:
+# sudo cp scripts/logrotate/veil-xray-api-log.example /etc/logrotate.d/veil-xray-api-log
+
+/opt/veil-xray/logs/veil_xray_api.log {
+    weekly
+    rotate 8
+    compress
+    delaycompress
+    missingok
+    notifempty
+    copytruncate
+}

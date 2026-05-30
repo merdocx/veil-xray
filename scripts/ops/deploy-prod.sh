@@ -69,6 +69,9 @@ fi
 if [[ -f "${PROD}/scripts/logrotate/veil-xray-backup-log.example" ]]; then
   install -m 644 "${PROD}/scripts/logrotate/veil-xray-backup-log.example" /etc/logrotate.d/veil-xray-backup-log
 fi
+if [[ -f "${PROD}/scripts/logrotate/veil-xray-api-log.example" ]]; then
+  install -m 644 "${PROD}/scripts/logrotate/veil-xray-api-log.example" /etc/logrotate.d/veil-xray-api-log
+fi
 
 if ! command -v sqlite3 >/dev/null 2>&1; then
   echo "WARN: sqlite3 not found — install for backup_database.sh: apt-get install -y sqlite3" >&2
@@ -76,6 +79,17 @@ fi
 
 echo "==> cron (runtime ${PROD})"
 VEIL_PROD_DIR="$PROD" "${PROD}/scripts/ops/install-ops-cron.sh"
+
+chmod +x "${PROD}/scripts/ops/"*.sh "${PROD}/scripts/load-protection/"*.sh 2>/dev/null || true
+
+echo "==> SLO profile (auto by RAM)"
+if [[ -x "${PROD}/scripts/ops/apply-slo-profile.sh" ]]; then
+  "${PROD}/scripts/ops/apply-slo-profile.sh" auto
+fi
+
+echo "==> autostart (systemd enable)"
+systemctl enable xray 2>/dev/null || true
+systemctl enable nginx 2>/dev/null || true
 
 echo "==> policy recommended (idempotent)"
 if [[ -x "${PROD}/scripts/load-protection/apply-policy-recommended.sh" ]]; then
@@ -124,5 +138,10 @@ if [[ "$health_ok" -ne 1 ]]; then
   echo "WARN: /health not ready after 60s — check: journalctl -u veil-xray-api -n 50" >&2
 fi
 /usr/local/bin/xray -test -config /usr/local/etc/xray/config.json | tail -1
+
+if [[ -x "${PROD}/scripts/ops/server-load-status.sh" ]]; then
+  echo "==> load status"
+  "${PROD}/scripts/ops/server-load-status.sh" || true
+fi
 
 echo "==> deploy done ($(cat "${PROD}/VERSION" 2>/dev/null || echo unknown)) repo=${REPO} prod=${PROD}"

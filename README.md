@@ -16,7 +16,9 @@
 
 | Раздел | Файл |
 |--------|------|
+| **Требования к серверу, мониторинг, автозапуск, логи** | [docs/operations/SERVER_REQUIREMENTS.md](docs/operations/SERVER_REQUIREMENTS.md) |
 | **Сервисы, логи, ротация, автозапуск, мониторинг, бэкапы** | [docs/OPERATIONS.md](docs/OPERATIONS.md) |
+| Первый деплой (чеклист) | [docs/operations/FIRST_DEPLOY.md](docs/operations/FIRST_DEPLOY.md) |
 | Индекс всех документов | [docs/README.md](docs/README.md) |
 | Бэкапы SQLite и логирование API | [scripts/BACKUP_AND_LOGGING.md](scripts/BACKUP_AND_LOGGING.md) |
 | **Egress (direct / SOCKS / WireGuard, релей)** | [docs/operations/egress-modes.md](docs/operations/egress-modes.md) |

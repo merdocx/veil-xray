@@ -1,3 +1,16 @@
+## [1.3.20] - 2026-05-30
+
+### Добавлено
+- [docs/operations/SERVER_REQUIREMENTS.md](docs/operations/SERVER_REQUIREMENTS.md) — требования к VPS, мониторинг, автозапуск, ротация логов.
+- `scripts/ops/server-load-status.sh` — краткий статус загрузки и сервисов.
+- `scripts/ops/apply-slo-profile.sh` + `slo-thresholds-2g.env.example` — пороги SLO для 2 GiB RAM.
+- `scripts/logrotate/veil-xray-api-log.example` — logrotate для API-лога в `/opt/veil-xray/logs/`.
+
+### Изменено
+- `deploy-prod.sh`: SLO auto-profile, enable xray/nginx, logrotate API, `server-load-status` после деплоя.
+- [FIRST_DEPLOY.md](docs/operations/FIRST_DEPLOY.md), [OPERATIONS.md](docs/OPERATIONS.md) — разделы мониторинг / автозапуск / logrotate.
+- `sysctl-tcp-tuning.conf`: `ip_forward` для IPv4/IPv6.
+
 ## [1.3.19] - 2026-05-30
 
 ### Добавлено
