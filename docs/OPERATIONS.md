@@ -14,7 +14,17 @@
 ## API: ключи без перезагрузки Xray
 
 - `POST /api/keys` / `DELETE /api/keys/{id}` — hot-add через `xray api adu` / `rmu` + запись в `config.json` **без** `systemctl restart`.
-- `GET /api/keys/{id}/bot-bundle` — для veilbot: `vless_happ` + `subscription_singbox_b64`.
+- `GET /api/keys/{id}/bot-bundle` — для veilbot: `vless_happ`, `subscription_singbox_b64`, `singbox` (JSON).
+- `GET /api/keys/{id}/client-config` — Xray JSON с observatory (автовыбор); **не** для Happ-подписки.
+- `GET /api/keys/{id}/subscription?profiles=auto&format=singbox_b64` — то же sing-box, что в bot-bundle (veilbot `?format=happ`).
+
+**Интеграция veilbot (управляющий сервер):**
+
+| Действие | API панели |
+|----------|------------|
+| Создание ключа | `POST /keys` → `GET .../bot-bundle` или `link?profile=happ` |
+| Подписка Happ | `GET .../subscription?profiles=auto&format=singbox_b64` (fallback: `happ-config` по каждому серверу) |
+| Профили | `auto` — одна vless :448 + sing-box; `ru` / `all` — см. [API_DOCUMENTATION.md](../API_DOCUMENTATION.md) |
 - `POST /api/system/xray/sync-config` — только repair (не после каждого ключа); в peak hours MSK по умолчанию 503.
 
 ## Автозапуск (systemd)

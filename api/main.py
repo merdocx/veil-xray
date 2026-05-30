@@ -1702,17 +1702,19 @@ async def get_key_subscription(
     profiles: str = "auto",
 ):
     """
-    Подписка с несколькими профилями и автовыбором.
+    Подписка по профилю и формату.
 
     profiles:
-    - auto / happ: одна ссылка :448 (Happ/iOS)
-    - ru: XHTTP + :448 fallback; sing-box с XHTTP при format=singbox*
-    - primary / stable / all: наборы ссылок
+    - auto / happ: одна vless-ссылка :448; sing-box — TUN + urltest при 2+ inbounds (SNI-B)
+    - ru: XHTTP (+ fallback-ссылки); sing-box с XHTTP outbound
+    - primary / stable / all: фильтрованные ссылки из /links
 
     format:
-    - base64 / plain: список vless://
-    - singbox / happ_json / singbox_b64: sing-box TUN (рекомендуется для Happ)
-    - xray / xray_json: Xray JSON с DNS
+    - base64 / plain: vless:// (несколько строк только у ru / all)
+    - singbox / singbox_b64 / happ_json: sing-box JSON
+    - xray / xray_json: один outbound :448 + DNS (без observatory)
+
+    Полный автовыбор Xray (observatory): GET /client-config.
     """
     try:
         uuid_value, key_id_value, is_uuid = parse_key_identifier(identifier)
@@ -1772,8 +1774,14 @@ async def get_key_subscription(
         lines = [x.link for x in links_resp.links if x.profile in allowed]
 
     singbox_builder = build_auto_singbox_subscription_config
+    singbox_kwargs: dict[str, Any] = {
+        "uuid": uid,
+        "public_key": public_key,
+        "public_key_b": public_key_b,
+    }
     if profiles == "ru":
         singbox_builder = build_ru_singbox_subscription_config
+        singbox_kwargs = {"uuid": uid, "public_key": public_key}
 
     if not lines:
         raise HTTPException(
@@ -1782,11 +1790,11 @@ async def get_key_subscription(
         )
 
     if format in ("singbox", "happ_json"):
-        cfg = singbox_builder(uuid=uid, public_key=public_key)
+        cfg = singbox_builder(**singbox_kwargs)
         return JSONResponse(content=cfg)
 
     if format == "singbox_b64":
-        cfg = singbox_builder(uuid=uid, public_key=public_key)
+        cfg = singbox_builder(**singbox_kwargs)
         raw = json.dumps(cfg, ensure_ascii=False, separators=(",", ":"))
         b64 = base64.b64encode(raw.encode("utf-8")).decode("ascii")
         return Response(content=b64, media_type="text/plain; charset=utf-8")
@@ -1920,8 +1928,11 @@ async def get_bot_bundle(
     kid = int(key.id)  # type: ignore
 
     vless_happ = build_auto_subscription_links(uuid=uid, public_key=public_key)[0]
+    public_key_b = None
+    if settings.reality_sni_b_enabled and settings.reality_public_key_b:
+        public_key_b = normalize_reality_public_key(settings.reality_public_key_b)
     singbox_cfg = build_auto_singbox_subscription_config(
-        uuid=uid, public_key=public_key, public_key_b=None
+        uuid=uid, public_key=public_key, public_key_b=public_key_b
     )
     singbox_raw = json.dumps(singbox_cfg, ensure_ascii=False, separators=(",", ":"))
     singbox_b64 = base64.b64encode(singbox_raw.encode("utf-8")).decode("ascii")

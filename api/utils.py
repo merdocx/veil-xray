@@ -562,6 +562,7 @@ def _singbox_vless_outbound(
     *,
     tag: str,
     uuid: str,
+    server: str,
     port: int,
     sni: str,
     fingerprint: str,
@@ -571,7 +572,7 @@ def _singbox_vless_outbound(
     return {
         "type": "vless",
         "tag": tag,
-        "server": settings.domain,
+        "server": server,
         "server_port": port,
         "uuid": uuid,
         "packet_encoding": "xudp",
@@ -729,14 +730,18 @@ def build_auto_singbox_subscription_config(
     public_key_b: Optional[str] = None,
 ) -> dict[str, Any]:
     """
-    sing-box профиль: несколько outbounds + urltest (автовыбор по задержке) для Happ/iOS.
+    sing-box TUN для Happ: один или несколько VLESS outbounds.
+    При 2+ кандидатах — urltest (автовыбор по задержке) внутри одного JSON.
+    Список vless:// в подписке — одна ссылка :448 (build_auto_subscription_links).
     """
     sid = settings.reality_common_short_id
-    proxy_tags = ["proxy"]
-    proxy_outbounds: list[dict[str, Any]] = [
+    server = _server_address_for_links()
+    member_tags: list[str] = []
+    member_outbounds: list[dict[str, Any]] = [
         _singbox_vless_outbound(
-            tag="proxy",
+            tag="member-448",
             uuid=uuid,
+            server=server,
             port=settings.reality_happ_port_tcp,
             sni=settings.reality_sni,
             fingerprint="ios",
@@ -744,6 +749,38 @@ def build_auto_singbox_subscription_config(
             short_id=sid,
         ),
     ]
+    member_tags.append("member-448")
+
+    if settings.reality_sni_b_enabled and public_key_b and settings.reality_sni_b:
+        member_outbounds.append(
+            _singbox_vless_outbound(
+                tag="member-447",
+                uuid=uuid,
+                server=server,
+                port=settings.reality_port_sni_b,
+                sni=settings.reality_sni_b,
+                fingerprint=settings.reality_fingerprint_b_value,
+                public_key=public_key_b,
+                short_id=settings.reality_short_id_b or sid,
+            )
+        )
+        member_tags.append("member-447")
+
+    if len(member_tags) == 1:
+        member_outbounds[0]["tag"] = "proxy"
+        proxy_outbounds: list[dict[str, Any]] = member_outbounds
+    else:
+        proxy_outbounds = [
+            *member_outbounds,
+            {
+                "type": "urltest",
+                "tag": "proxy",
+                "outbounds": member_tags,
+                "url": "https://www.gstatic.com/generate_204",
+                "interval": "3m",
+                "tolerance": 50,
+            },
+        ]
 
     return {
         "log": {"disabled": False, "level": "warn"},
@@ -789,7 +826,7 @@ def build_auto_singbox_subscription_config(
 
 
 def build_happ_singbox_config(*, uuid: str, public_key: str) -> dict[str, Any]:
-    """sing-box профиль с urltest (не все сборки Happ)."""
+    """sing-box TUN для Happ; urltest при включённом SNI-B."""
     public_key_b = None
     if settings.reality_sni_b_enabled and settings.reality_public_key_b:
         public_key_b = normalize_reality_public_key(settings.reality_public_key_b)

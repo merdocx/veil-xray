@@ -1,6 +1,7 @@
 """Тесты генерации client-config."""
 
 from api.utils import (
+    build_auto_singbox_subscription_config,
     build_client_config,
     build_ru_singbox_subscription_config,
     build_auto_subscription_links,
@@ -67,6 +68,23 @@ def test_build_auto_subscription_single_happ_port(monkeypatch):
     )
     assert len(links) == 1
     assert ":448" in links[0]
+
+
+def test_build_auto_singbox_urltest_when_sni_b(monkeypatch):
+    monkeypatch.setattr(settings, "domain", "vpn.example.com")
+    monkeypatch.setattr(settings, "reality_sni_b", "cloudflare.com")
+    monkeypatch.setattr(settings, "reality_public_key_b", "pk_b")
+    monkeypatch.setattr(settings, "reality_private_key_b", "sk_b")
+
+    cfg = build_auto_singbox_subscription_config(
+        uuid="00000000-0000-4000-8000-000000000099",
+        public_key="pk_a",
+        public_key_b="pk_b",
+    )
+    urltest = next((o for o in cfg["outbounds"] if o.get("type") == "urltest"), None)
+    assert urltest is not None
+    assert urltest["tag"] == "proxy"
+    assert set(urltest["outbounds"]) == {"member-448", "member-447"}
 
 
 def test_build_ru_singbox_xhttp_outbound(monkeypatch):

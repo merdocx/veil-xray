@@ -505,11 +505,11 @@ Authorization: Bearer YOUR_SECRET_KEY
 
 #### `GET /api/keys/{identifier}/subscription`
 
-Подписка: несколько ссылок или sing-box JSON с автовыбором по ping.
+Подписка по профилю: vless-ссылки и/или JSON для клиента.
 
 **Query-параметры:**
-- `profiles` (string, по умолчанию `auto`) — `auto` | `happ` | `primary` | `stable` | `all`
-- `format` (string, по умолчанию `base64`) — `base64` | `plain` | `singbox` | `singbox_b64` | `happ_json`
+- `profiles` (string, по умолчанию `auto`) — `auto` | `happ` | `ru` | `primary` | `stable` | `all`
+- `format` (string, по умолчанию `base64`) — `base64` | `plain` | `singbox` | `singbox_b64` | `happ_json` | `xray` | `xray_json`
 
 **Примеры:**
 ```bash
@@ -517,14 +517,15 @@ GET /api/keys/1/subscription?profiles=auto&format=base64
 GET /api/keys/1/subscription?profiles=auto&format=singbox_b64
 ```
 
-| profiles | Содержание |
-|----------|------------|
-| `auto`, `happ` | Набор для мобильных (448, 446, 447 при SNI-B, 443) + urltest в sing-box |
-| `primary` | Только 443 |
-| `stable` | 443 + 446 |
-| `all` | Все профили из `/links` |
+| profiles | `format=base64` / `plain` | `format=singbox*` |
+|----------|---------------------------|-------------------|
+| `auto`, `happ` | **Одна** ссылка `:448` (для Happ) | sing-box TUN; **urltest** при включённом SNI-B (448 + 447), иначе один outbound |
+| `ru` | XHTTP + fallback `:448` | sing-box с XHTTP outbound |
+| `primary` / `stable` / `all` | Набор ссылок из `/links` | как `auto` (без отдельного multi-link в sing-box) |
 
-**Ответ:** `text/plain` (base64/plain) или `application/json` (singbox/happ_json).
+**Автовыбор (Xray, observatory + leastPing):** `GET /api/keys/{id}/client-config` — не используется в `profiles=auto` для Happ.
+
+**Ответ:** `text/plain` (base64/plain) или JSON / base64 sing-box / xray.
 
 ---
 
@@ -538,9 +539,21 @@ JSON-конфиг Xray для клиента: несколько outbounds, `bur
 
 #### `GET /api/keys/{identifier}/happ-config`
 
-JSON sing-box для Happ (iOS): FakeIP, urltest, порт 448 без Vision-flow.
+JSON sing-box для Happ (iOS): TUN, FakeIP, порт 448 без Vision-flow; urltest при 2+ inbounds (SNI-B).
 
 **Ответ:** JSON-документ.
+
+---
+
+#### `GET /api/keys/{identifier}/bot-bundle`
+
+Сводный ответ для **veilbot** при создании ключа:
+
+| Поле | Содержание |
+|------|------------|
+| `vless_happ` | Одна ссылка `vless://` (:448, `profile=auto`) |
+| `subscription_singbox_b64` | base64 sing-box TUN (как `subscription?profiles=auto&format=singbox_b64`) |
+| `singbox` | Тот же JSON в открытом виде |
 
 ---
 
