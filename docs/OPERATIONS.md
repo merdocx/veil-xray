@@ -9,7 +9,7 @@
 
 Деплой: `scripts/ops/deploy-prod.sh` — pull в `/root`, `rsync` в `/opt`, restart API.
 
-**Эталон:** [operations/SERVER_PROFILE.md](operations/SERVER_PROFILE.md) · **Рекомендуемые значения:** [operations/RECOMMENDED_SETTINGS.md](operations/RECOMMENDED_SETTINGS.md) (v1.3.18). **RU-мост:** [operations/ru-bridge-chain.md](operations/ru-bridge-chain.md).
+**Эталон:** [operations/SERVER_PROFILE.md](operations/SERVER_PROFILE.md) · **Рекомендуемые значения:** [operations/RECOMMENDED_SETTINGS.md](operations/RECOMMENDED_SETTINGS.md). **Топологии (база / мост / WG — опции):** [operations/ru-bridge-chain.md](operations/ru-bridge-chain.md).
 
 ## API: ключи без перезагрузки Xray
 
@@ -24,7 +24,7 @@
 | `xray.service` | Xray VLESS+Reality, config `/usr/local/etc/xray/config.json` | enabled |
 | `veil-xray-api.service` | FastAPI `127.0.0.1:8000` | enabled |
 | `nginx.service` | TLS reverse proxy для API | enabled |
-| `wg-quick@wg0` | WireGuard egress на релей (если включён на узле) | enabled |
+| `wg-quick@wg0` | WireGuard egress (**опционально**, только при варианте C в [egress-modes.md](operations/egress-modes.md)) | по узлу |
 | `netdata.service` | Мониторинг (localhost:19999) | **disabled** на prod |
 
 ```bash

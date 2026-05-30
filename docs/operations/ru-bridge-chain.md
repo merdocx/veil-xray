@@ -1,126 +1,169 @@
-# Цепочка RU-мост → egress (обход ТСПУ)
+# Топологии veil-xray: база и опции (мост, WG, релей)
 
-> **Соглашение для этой инструкции:** IP, порты, SNI, `shortId`, домены бота и фрагменты JSON — **только примеры**.  
-> На каждом хосте подставляйте свои значения из `.env`, `config.json` и API. Имена вроде `<BRIDGE_IP>` — плейсхолдеры, не копируйте буквально.
+> **Соглашение:** IP, порты, SNI, домены и JSON — **примеры**. Плейсхолдеры `<…>` подставляйте из своего `.env`, `config.json` и API.
 
-Для пользователей из России прямое подключение **клиент → зарубежный IP** часто приводит к «заморозке» TCP после 15–20 KB. Рекомендуемая схема:
+**По умолчанию** достаточно **одного** сервера veil-xray: клиент → VLESS+REALITY → интернет (`direct`).  
+**RU-мост** и **WireGuard/SOCKS-релей** — **необязательные** усиления; включайте только если нужны вашей схеме.
+
+---
+
+## Варианты развёртывания
+
+| Вариант | Состав | Когда имеет смысл |
+|---------|--------|-------------------|
+| **A — базовый** (по умолчанию) | 1× veil-xray + veilbot | Стандартная выдача ключей и подписок; egress = IP этого сервера |
+| **B — SOCKS-релей** | A + отдельный VPS с SOCKS | Нужен выход с другого IP без WG |
+| **C — WireGuard-релей** | A + `wg0` на релей | Нужен выход с IP релея через туннель |
+| **D — RU-мост** | A + VPS в РФ (мост) | Снижение freeze ТСПУ для аудитории в РФ; **без** B/C на мосте не обязательно |
+
+Варианты **B**, **C**, **D** независимы: можно A только; A+B; A+C; A+D; теоретически A+B+D и т.д. — по вашему дизайну.
 
 ```text
-[Клиент в РФ] ──REALITY──► [VPS в РФ, мост] ──XHTTP/chain──► [veil-xray egress] ──► [Интернет]
-                                    │
-                                    └── geosite:category-ru → direct (без VPN)
+A (база):  [Клиент] ──REALITY──► [veil-xray] ──direct──► [Интернет]
+
+B:         [Клиент] ──► [veil-xray] ──SOCKS──► [релей] ──► [Интернет]
+
+C:         [Клиент] ──► [veil-xray] ──WG wg0──► [релей] ──► [Интернет]
+
+D:         [Клиент РФ] ──► [мост РФ] ──chain──► [veil-xray] ──► [Интернет]
+                              └── geosite:ru → direct (опционально на мосте)
 ```
 
-## Роли узлов
-
-| Узел | Где | Задача |
-|------|-----|--------|
-| **veilbot** | Отдельный VPS (например, ваш домен подписок) | Telegram, оплата, подписки; дергает API панели |
-| **veil-xray (egress)** | Зарубежный VPS (например, EU/KZ) | Ключи в SQLite, hot-add в Xray, выход в интернет (direct / WG / SOCKS) |
-| **RU-мост** | VPS в РФ (любой провайдер с РФ-IP) | Принимает клиентов; гонит нероссийский трафик на egress |
+Подробнее про B и C: [egress-modes.md](egress-modes.md).
 
 ---
 
-## Как это работает сейчас (без моста)
+## Вариант A — базовая схема (без моста, без WG)
 
-1. Пользователь покупает подписку в **veilbot**.
-2. Бот вызывает **veil-xray API**: `POST /api/keys` → UUID попадает в Xray без перезапуска (`xray api adu`).
-3. Пользователь получает ссылку подписки вида  
-   `https://<ваш-домен-бота>/api/subscription/<token>?format=happ` (пример query-параметра: `format=happ`).
-4. Бот запрашивает у панели  
-   `GET .../subscription?profiles=auto&format=singbox_b64` — Happ получает профиль с DNS и TUN.
-5. Трафик идёт **напрямую** на IP egress (порты inbounds задаются в **вашем** `config.json`, часто встречаются 443, 448, 446, 8445 — не норма для всех установок).
+### Роли
 
-**veilbot не крутит VPN** — только управление и выдача конфигов.
+| Узел | Задача |
+|------|--------|
+| **veilbot** | Оплата, подписки, вызов API панели (отдельный VPS) |
+| **veil-xray** | Xray inbounds, API, SQLite, hot-add ключей |
 
----
+### Как работает
 
-## Как будет работать с мостом
+1. Пользователь в **veilbot** → `POST /api/keys` на veil-xray (UUID в Xray без restart).
+2. Подписка (пример URL):  
+   `https://<домен-бота>/api/subscription/<token>?format=happ`
+3. Бот запрашивает у панели (пример):  
+   `GET .../subscription?profiles=auto&format=singbox_b64`
+4. Клиент (Happ и др.) подключается **напрямую** к IP/DNS **veil-xray**.
+5. Исходящий трафик — outbound **`direct`** в `config.json` (шаблон: [xray/config.example.json](../../xray/config.example.json) без релея или с routing только на `direct`).
 
-1. Пользователь подключается к **IP моста в РФ** (в подписке — профиль `ru` / XHTTP, а не прямой inbound egress для конечных клиентов).
-2. Мост расшифровывает VLESS+REALITY; российские сайты (`geosite:category-ru`, `geoip:ru`) можно отправлять **напрямую** в интернет РФ.
-3. Остальной трафик мост пересылает на **egress** по внутреннему VLESS (часто **XHTTP** на участке мост→egress).
-4. На egress в firewall имеет смысл разрешить chain-inbound **только с IP моста**; публичные inbounds для конечных пользователей РФ можно не публиковать.
+**Не требуется:** второй VPS в РФ, WireGuard, SOCKS, отдельный chain-inbound.
 
----
-
-## API veil-xray (эндпоинты)
+### API (базовые эндпоинты)
 
 | Запрос | Назначение |
 |--------|------------|
-| `GET /api/keys/{id}/link?profile=happ` | Профиль Happ/iOS (порт задаётся на сервере, часто 448) |
-| `GET /api/keys/{id}/link?profile=ru` | Профиль с XHTTP для схемы с мостом |
-| `GET /api/keys/{id}/subscription?profiles=ru&format=singbox_b64` | Подписка sing-box (когда мост готов) |
-| `GET /api/keys/{id}/bot-bundle` | Сводка для veilbot (VLESS + sing-box b64) |
+| `GET /api/keys/{id}/link?profile=happ` | Профиль для Happ/iOS |
+| `GET /api/keys/{id}/link?profile=primary` / `stable` | Другие inbounds по вашему `config.json` |
+| `GET /api/keys/{id}/bot-bundle` | Сводка для veilbot |
+| `GET .../subscription?profiles=auto&format=singbox_b64` | Подписка sing-box |
 
-Создание/удаление ключей: hot-add (`adu` / `rmu`). Полный `sync-config` — только ручной repair, не после каждого ключа.
+`profile=ru` и `profiles=ru` — **только для варианта D** (мост), в базе не нужны.
 
-**veilbot:** при интеграции обычно используют `?format=happ` и не вызывают `sync-config` после `POST /keys` (конкретика — в коде/деплое бота).
+### Чеклист базы
+
+- [ ] Xray + veil-xray-api на одном узле
+- [ ] veilbot → API URL с `/api` и Bearer-токеном
+- [ ] Подписка с DNS (пример: `?format=happ`)
+- [ ] Outbound `direct` (или ваш осознанный выбор B/C)
 
 ---
 
-## Инструкция: настройка RU-моста
+## Вариант B — опционально: SOCKS-релей
 
-### Шаг 0. Подготовка
+Дополнение к A: в `config.json` outbound `upstream` (SOCKS) и routing на него.  
+API по-прежнему только управляет **clients** inbounds.
 
-- VPS в **РФ**, Linux, открыты **ваши** порты (пример: `443/tcp`, `8445/tcp` — возьмите из плана inbounds).
-- Xray 25.x/26.x, `geoip.dat` / `geosite.dat` (путь как в вашей установке, часто `/usr/local/share/xray/`).
-- Завести переменные (имена произвольные, смысл важен):
+- Шаблон: `xray/config.example.json` (замените `<RELAY_HOST>` на IP релея).
+- Проверка: `scripts/verify-egress-via-relay.sh` (пример env в [egress-modes.md](egress-modes.md)).
 
-| Плейсхолдер | Откуда взять |
-|-------------|----------------|
+**Не требуется** для работы veil-xray в варианте A.
+
+---
+
+## Вариант C — опционально: WireGuard-релей
+
+Дополнение к A: на **том же** входном узле `wg-quick@wg0` + outbound с `sockopt.mark` (пример в [egress-modes.md](egress-modes.md)).
+
+- Юнит `wg-quick@wg0` включают **только** на хостах с настроенным `/etc/wireguard/wg0.conf`.
+- На узле без WG сервис можно **не** ставить / держать disabled.
+
+**Не требуется** для работы veil-xray в варианте A.
+
+---
+
+## Вариант D — опционально: RU-мост → egress
+
+Отдельный VPS в РФ принимает клиентов; зарубежный veil-xray остаётся egress.  
+Имеет смысл при проблемах «клиент РФ → foreign IP» (freeze DPI), а не как обязательный шаг установки.
+
+### Когда рассматривать
+
+- База (A) уже работает, но из РФ нестабильны длинные сессии на зарубежный IP.
+- Готовы администрировать **второй** сервер и согласовать chain с egress.
+
+### Кратко по потоку
+
+1. Клиент → **IP моста** (профиль `ru` / XHTTP в подписке).
+2. Мост: при желании RU-трафик → `direct`, остальное → chain на `<EGRESS_PUBLIC_IP>`.
+3. Egress: отдельный inbound только для моста (firewall с `<BRIDGE_PUBLIC_IP>`).
+
+### API (дополнение к A, только при включённом D)
+
+| Запрос | Назначение |
+|--------|------------|
+| `GET /api/keys/{id}/link?profile=ru` | Ссылка под XHTTP / мост |
+| `GET .../subscription?profiles=ru&format=singbox_b64` | Подписка под мост |
+
+### D — шаг 0. Подготовка (пример плейсхолдеров)
+
+| Плейсхолдер | Откуда |
+|-------------|--------|
 | `<BRIDGE_PUBLIC_IP>` | IP RU VPS |
-| `<EGRESS_PUBLIC_IP>` | IP зарубежного veil-xray |
-| `<EGRESS_API_URL>` | URL API панели, например `https://<host>:8443/api` |
-| `<USER_UUID>` | `POST /api/keys` или бот |
-| `<CHAIN_PORT>` | Свободный порт на egress только для моста |
-| `<REALITY_*>` | `init_reality_keys.py` / `.env` на соответствующем узле |
+| `<EGRESS_PUBLIC_IP>` | IP veil-xray |
+| `<CHAIN_PORT>` | Свободный порт на egress для моста |
+| `<USER_UUID>` | API / бот |
+| `<REALITY_*>` | `init_reality_keys.py` / `.env` |
 
-На **egress** заведите **отдельный** inbound для chain (свой порт и `shortIds`), не смешивайте с публичным inbound для Happ.
-
-### Шаг 1. Egress — ограничить прямой вход на chain
-
-Пример UFW (подставьте свои IP и порт):
+### D — шаг 1. Egress: chain-inbound (пример UFW)
 
 ```bash
-BRIDGE_IP=<BRIDGE_PUBLIC_IP>      # пример: 203.0.113.10
-CHAIN_PORT=<CHAIN_PORT>            # пример: 8446
+BRIDGE_IP=<BRIDGE_PUBLIC_IP>
+CHAIN_PORT=<CHAIN_PORT>
 
 ufw allow from "$BRIDGE_IP" to any port "$CHAIN_PORT" proto tcp
 ```
 
-В `config.json` egress — inbound с тегом на ваш выбор (пример имени: `vless-reality-bridge`): порт `<CHAIN_PORT>`, свои `shortIds` и SNI, согласованные с leg мост→egress. С интернета на этот порт — только мост.
+Inbound (пример тега `vless-reality-bridge`) — в **вашем** `config.json` на egress.
 
-После правки inbounds: `xray -test` и перезапуск/reload по [PRODUCTION_RUNBOOK.md](PRODUCTION_RUNBOOK.md).
-
-### Шаг 2. Мост — REALITY inbound для клиентов
-
-Фрагмент **примерной** конфигурации (`/usr/local/etc/xray/config.json` на RU VPS):
+### D — шаг 2. Мост: пример фрагмента `config.json`
 
 ```json
 {
-  "inbounds": [
-    {
-      "tag": "vless-reality-ru-client",
-      "port": 443,
-      "protocol": "vless",
-      "settings": {
-        "clients": [{ "id": "<USER_UUID>", "flow": "" }],
-        "decryption": "none"
-      },
-      "streamSettings": {
-        "network": "tcp",
-        "security": "reality",
-        "realitySettings": {
-          "dest": "<RU_COVER_DEST>",
-          "serverNames": ["<RU_SNI_1>", "<RU_SNI_2>"],
-          "privateKey": "<BRIDGE_REALITY_PRIVATE_KEY>",
-          "shortIds": ["<BRIDGE_SHORT_ID>"]
-        }
-      },
-      "sniffing": { "enabled": true, "destOverride": ["http", "tls"] }
+  "inbounds": [{
+    "tag": "vless-reality-ru-client",
+    "port": "<CLIENT_PORT>",
+    "protocol": "vless",
+    "settings": {
+      "clients": [{ "id": "<USER_UUID>", "flow": "" }],
+      "decryption": "none"
+    },
+    "streamSettings": {
+      "network": "tcp",
+      "security": "reality",
+      "realitySettings": {
+        "dest": "<RU_COVER_DEST>",
+        "serverNames": ["<RU_SNI>"],
+        "privateKey": "<BRIDGE_REALITY_PRIVATE_KEY>",
+        "shortIds": ["<BRIDGE_SHORT_ID>"]
+      }
     }
-  ],
+  }],
   "outbounds": [
     { "tag": "direct", "protocol": "freedom" },
     {
@@ -147,7 +190,6 @@ ufw allow from "$BRIDGE_IP" to any port "$CHAIN_PORT" proto tcp
     }
   ],
   "routing": {
-    "domainStrategy": "IPIfNonMatch",
     "rules": [
       { "type": "field", "domain": ["geosite:category-ru"], "outboundTag": "direct" },
       { "type": "field", "ip": ["geoip:ru"], "outboundTag": "direct" },
@@ -157,48 +199,36 @@ ufw allow from "$BRIDGE_IP" to any port "$CHAIN_PORT" proto tcp
 }
 ```
 
-**Примеры значений (не копировать вслепую):**
+Правила `geosite:category-ru` → `direct` на мосте **опциональны** (можно весь трафик гнать на egress).
 
-| Поле | Пример смысла |
-|------|----------------|
-| `<RU_COVER_DEST>` | `www.example.ru:443` — легитимный RU HTTPS-сайт под TLS 1.3 |
-| `<RU_SNI_*>` | те же домены, что в `serverNames` |
-| `<EGRESS_SNI>` | SNI egress inbound (как в `.env`: `REALITY_SNI`) |
-| `<REALITY_XHTTP_PATH>` | из `.env` egress: `REALITY_XHTTP_PATH` |
-| `<FP>` | `ios`, `chrome`, `firefox` — по политике клиента |
-| `port` inbound клиентов | любой открытый порт, не обязательно 443 |
+### D — проверка (примеры)
 
-Проверка:
+1. Зарубежный сайт: на мосте `chain-egress`, на egress source = `<BRIDGE_PUBLIC_IP>`.
+2. С чужого IP на `<EGRESS_PUBLIC_IP>:<CHAIN_PORT>` — отклонено firewall (если настроено).
 
-```bash
-xray -test -config /usr/local/etc/xray/config.json
-systemctl enable --now xray
-```
+### Чеклист D (только если включили мост)
 
-### Шаг 3. DNS на мосте
-
-DNS задаётся в **клиентском** профиле (sing-box/Happ) или отдельным inbound на мосте — как решите в своём шаблоне. На egress для RU-профиля логика может быть в `build_ru_singbox_subscription_config` (см. код `api/utils.py`).
-
-### Шаг 4. Выдача пользователям
-
-- Когда мост готов: `GET /api/keys/{id}/link?profile=ru`, подписка `profiles=ru&format=singbox_b64`.
-- В veilbot при необходимости — отдельный `format` / смена `profiles=auto` (зависит от вашего деплоя бота).
-- **Happ:** для полного туннеля обычно нужен режим **Global** (не Rule) и удалённый DNS — это настройки **клиента**, не константы сервера.
-
-### Шаг 5. Проверка
-
-1. С клиента в РФ — зарубежный сайт: в логах **моста** outbound `chain-egress`, на **egress** — accepted с source `<BRIDGE_PUBLIC_IP>`.
-2. Сайт из `geosite:category-ru` — на мосте outbound `direct` (проверьте на **вашем** тестовом RU-домене).
-3. С произвольного IP на `<EGRESS_PUBLIC_IP>:<CHAIN_PORT>` — соединение **отклонено** firewall (если правило настроено).
+- [ ] Egress: chain-inbound + firewall с IP моста
+- [ ] Мост: REALITY + chain на egress
+- [ ] Бот/API: `profile=ru` / `profiles=ru` для целевой аудитории
 
 ---
 
-## Чеклист внедрения
+## veilbot (все варианты)
 
-- [ ] Egress: inbound для моста + firewall только с `<BRIDGE_PUBLIC_IP>`
-- [ ] Мост: REALITY с RU cover SNI, routing RU → direct
-- [ ] Leg мост→egress: согласованы UUID, shortId, XHTTP path с egress
-- [ ] API/бот: выдача `profile=ru` / `profiles=ru` для целевой аудитории
-- [ ] Мониторинг: внешний probe из РФ (порог трафика — на ваше усмотрение)
+Бот не поднимает VPN. Типичная интеграция с **вариантом A**:
 
-См. также: [egress-modes.md](egress-modes.md), [routing-split-ru-restore.md](routing-split-ru-restore.md), [SERVER_PROFILE.md](SERVER_PROFILE.md).
+- `?format=happ` в URL подписки
+- после `POST /keys` не вызывать `sync-config`
+- `GET .../bot-bundle` или `subscription?profiles=auto&format=singbox_b64`
+
+Для **D** — дополнительно выдача `profiles=ru`, когда мост в проде.
+
+---
+
+## Связанные документы
+
+- [egress-modes.md](egress-modes.md) — варианты B и C (SOCKS / WG)
+- [routing-split-ru-restore.md](routing-split-ru-restore.md) — опциональный split RU на **одном** узле (не то же самое, что мост D)
+- [OPERATIONS.md](../OPERATIONS.md) — systemd, деплой
+- [SERVER_PROFILE.md](SERVER_PROFILE.md) — пример **конкретного** prod-хоста (не универсальный чеклист)
