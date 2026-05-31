@@ -3,33 +3,39 @@
 > **Соглашение:** IP, порты, SNI, домены и JSON — **примеры**. Плейсхолдеры `<…>` подставляйте из своего `.env`, `config.json` и API.
 
 **По умолчанию** достаточно **одного** сервера veil-xray: клиент → VLESS+REALITY → интернет (`direct`).  
-**RU-мост** и **WireGuard/SOCKS-релей** — **необязательные** усиления; включайте только если нужны вашей схеме.
+**Front relay**, **egress-релей** (SOCKS/WG) и **RU-мост** — **необязательные** усиления.
 
 ---
 
 ## Варианты развёртывания
 
-| Вариант | Состав | Когда имеет смысл |
-|---------|--------|-------------------|
-| **A — базовый** (по умолчанию) | 1× veil-xray + veilbot | Стандартная выдача ключей и подписок; egress = IP этого сервера |
-| **B — SOCKS-релей** | A + отдельный VPS с SOCKS | Нужен выход с другого IP без WG |
-| **C — WireGuard-релей** | A + `wg0` на релей | Нужен выход с IP релея через туннель |
-| **D — RU-мост** | A + VPS в РФ (мост) | Снижение freeze ТСПУ для аудитории в РФ; **без** B/C на мосте не обязательно |
+| Вариант | Путь трафика | Когда имеет смысл |
+|---------|--------------|-------------------|
+| **A — базовый** (по умолчанию) | Клиент → veil-xray → интернет | Стандартная выдача ключей; egress = IP VPN-сервера |
+| **E — front relay** | Клиент → **релей (L4)** → veil-xray → интернет | Стабильный вход через ближний VPS; REALITY на backend |
+| **B — SOCKS egress** | Клиент → veil-xray → SOCKS-релей → интернет | Выход с другого IP без WG |
+| **C — WG egress** | Клиент → veil-xray → WG → релей → интернет | Выход с IP релея через туннель |
+| **D — RU-мост** | Клиент → мост (Xray) → veil-xray → интернет | Freeze ТСПУ; прикладной chain, не L4 |
 
-Варианты **B**, **C**, **D** независимы: можно A только; A+B; A+C; A+D; теоретически A+B+D и т.д. — по вашему дизайну.
+**E** — релей **перед** VPN ([relay-front-topology.md](relay-front-topology.md)).  
+**B / C** — релей **после** VPN ([egress-modes.md](egress-modes.md)).  
+**D** — отдельный входной Xray на мосте, не nginx stream.
+
+Варианты независимы (кроме здравого смысла: E+D обычно не смешивают).
 
 ```text
-A (база):  [Клиент] ──REALITY──► [veil-xray] ──direct──► [Интернет]
+A:  [Клиент] ──REALITY──► [veil-xray] ──direct──► [Интернет]
 
-B:         [Клиент] ──► [veil-xray] ──SOCKS──► [релей] ──► [Интернет]
+E:  [Клиент] ──TCP──► [front relay] ──TCP──► [veil-xray] ──► [Интернет]
 
-C:         [Клиент] ──► [veil-xray] ──WG wg0──► [релей] ──► [Интернет]
+B:  [Клиент] ──► [veil-xray] ──SOCKS──► [egress-релей] ──► [Интернет]
 
-D:         [Клиент РФ] ──► [мост РФ] ──chain──► [veil-xray] ──► [Интернет]
-                              └── geosite:ru → direct (опционально на мосте)
+C:  [Клиент] ──► [veil-xray] ──WG──► [egress-релей] ──► [Интернет]
+
+D:  [Клиент РФ] ──► [мост РФ] ──chain──► [veil-xray] ──► [Интернет]
 ```
 
-Подробнее про B и C: [egress-modes.md](egress-modes.md).
+Подробнее: **E** — [relay-front-topology.md](relay-front-topology.md); **B/C** — [egress-modes.md](egress-modes.md).
 
 ---
 
@@ -74,7 +80,18 @@ D:         [Клиент РФ] ──► [мост РФ] ──chain──► [v
 
 ---
 
-## Вариант B — опционально: SOCKS-релей
+## Вариант E — опционально: front relay (L4)
+
+Клиент подключается к **IP/DNS релея**; nginx stream (или DNAT) пробрасывает TCP на veil-xray. API и ключи — только на **backend**; в `.env` задаётся `DOMAIN=<адрес релея>`.
+
+- Runbook: [relay-front-topology.md](relay-front-topology.md)
+- Шаблон nginx: [scripts/relay/nginx-stream-l4.conf.example](../../scripts/relay/nginx-stream-l4.conf.example)
+
+**Не требуется** для варианта A. **Не путать** с B/C (egress после VPN) и D (Xray-мост).
+
+---
+
+## Вариант B — опционально: SOCKS-релей (egress)
 
 Дополнение к A: в `config.json` outbound `upstream` (SOCKS) и routing на него.  
 API по-прежнему только управляет **clients** inbounds.
@@ -228,7 +245,8 @@ Inbound (пример тега `vless-reality-bridge`) — в **вашем** `co
 
 ## Связанные документы
 
-- [egress-modes.md](egress-modes.md) — варианты B и C (SOCKS / WG)
+- [relay-front-topology.md](relay-front-topology.md) — вариант E (L4 front relay)
+- [egress-modes.md](egress-modes.md) — варианты B и C (SOCKS / WG egress)
 - [routing-split-ru-restore.md](routing-split-ru-restore.md) — опциональный split RU на **одном** узле (не то же самое, что мост D)
 - [OPERATIONS.md](../OPERATIONS.md) — systemd, деплой
 - [SERVER_PROFILE.md](SERVER_PROFILE.md) — пример **конкретного** prod-хоста (не универсальный чеклист)

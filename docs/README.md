@@ -15,6 +15,7 @@
 | [operations/FIRST_DEPLOY.md](operations/FIRST_DEPLOY.md) | **Первый деплой на VPS (UFW, Reality, veilbot)** |
 | [operations/load-protection/](operations/load-protection/) | SLO, baseline, policy Xray, systemd, stress-mode |
 | [operations/routing-split-ru-restore.md](operations/routing-split-ru-restore.md) | Опционально: split RU/foreign (geoip/geosite) |
-| [operations/ru-bridge-chain.md](operations/ru-bridge-chain.md) | **Топологии:** база (без моста/WG), опции SOCKS, WG, RU-мост |
+| [operations/ru-bridge-chain.md](operations/ru-bridge-chain.md) | **Топологии A–E:** база, front relay, egress SOCKS/WG, RU-мост |
+| [operations/relay-front-topology.md](operations/relay-front-topology.md) | **E:** пользователь → релей (L4) → VPN → интернет |
 | [../scripts/BACKUP_AND_LOGGING.md](../scripts/BACKUP_AND_LOGGING.md) | Бэкапы SQLite и логирование API |
 | [../scripts/load-protection/README.md](../scripts/load-protection/README.md) | Скрипты baseline и stress-mode |

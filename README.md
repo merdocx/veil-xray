@@ -1,6 +1,6 @@
 # Veil Xray - VLESS+Reality VPN Server with API Management
 
-**Версия:** 1.3.20 · **Prod:** 2 vCPU / 4 GiB (см. [SERVER_PROFILE](docs/operations/SERVER_PROFILE.md), [VERSION](VERSION), [CHANGELOG](CHANGELOG.md))
+**Версия:** 1.3.21 · **Prod:** 2 vCPU / 4 GiB (см. [SERVER_PROFILE](docs/operations/SERVER_PROFILE.md), [VERSION](VERSION), [CHANGELOG](CHANGELOG.md))
 Сервер VPN на базе Xray с протоколом VLESS+Reality и REST API для управления пользователями и мониторинга трафика.
 
 ## 🚀 Особенности
@@ -21,7 +21,9 @@
 | Первый деплой (чеклист) | [docs/operations/FIRST_DEPLOY.md](docs/operations/FIRST_DEPLOY.md) |
 | Индекс всех документов | [docs/README.md](docs/README.md) |
 | Бэкапы SQLite и логирование API | [scripts/BACKUP_AND_LOGGING.md](scripts/BACKUP_AND_LOGGING.md) |
-| **Egress (direct / SOCKS / WireGuard, релей)** | [docs/operations/egress-modes.md](docs/operations/egress-modes.md) |
+| **Топологии (A–E: база, front relay, egress, мост)** | [docs/operations/ru-bridge-chain.md](docs/operations/ru-bridge-chain.md) |
+| **Egress (direct / SOCKS / WireGuard после VPN)** | [docs/operations/egress-modes.md](docs/operations/egress-modes.md) |
+| **Front relay (релей перед VPN, L4)** | [docs/operations/relay-front-topology.md](docs/operations/relay-front-topology.md) |
 | **Профиль prod-сервера (лимиты, .env, SLO)** | [docs/operations/SERVER_PROFILE.md](docs/operations/SERVER_PROFILE.md) |
 | **Рекомендуемые настройки (policy, SLO, routing)** | [docs/operations/RECOMMENDED_SETTINGS.md](docs/operations/RECOMMENDED_SETTINGS.md) |
 | Защита от перегрузки (SLO, baseline) | [docs/operations/load-protection/](docs/operations/load-protection/) |

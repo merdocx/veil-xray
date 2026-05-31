@@ -1,3 +1,10 @@
+## [1.3.21] - 2026-05-31
+
+### Документация
+- [docs/operations/relay-front-topology.md](docs/operations/relay-front-topology.md) — вариант **E**: пользователь → front relay (L4) → veil-xray → интернет.
+- [ru-bridge-chain.md](docs/operations/ru-bridge-chain.md) — таблица топологий A–E; различие front relay (E) vs egress (B/C) vs мост (D).
+- [scripts/relay/](scripts/relay/) — пример nginx stream для L4-проброса.
+
 ## [1.3.20] - 2026-05-30
 
 ### Документация

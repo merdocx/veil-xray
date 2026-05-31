@@ -1,0 +1,53 @@
+# Front relay (вариант E): L4 TCP → veil-xray backend
+# Установка: /etc/nginx/stream.d/veil-front.conf
+# Замените <VPN_BACKEND_IP> на публичный IP VPN-сервера (veil-xray).
+#
+# UFW на backend: allow from <FRONT_RELAY_IP> to ports below.
+# DOMAIN в .env API на backend = DNS/IP этого front relay (см. docs/operations/relay-front-topology.md).
+#
+# В nginx.conf должен быть блок: stream { include /etc/nginx/stream.d/*.conf; }
+# Этот файл — только upstream/server (без внешнего stream {}).
+
+upstream veil_443  { server <VPN_BACKEND_IP>:443; }
+    upstream veil_446  { server <VPN_BACKEND_IP>:446; }
+    upstream veil_447  { server <VPN_BACKEND_IP>:447; }
+    upstream veil_448  { server <VPN_BACKEND_IP>:448; }
+    upstream veil_8445 { server <VPN_BACKEND_IP>:8445; }
+    upstream veil_2085 { server <VPN_BACKEND_IP>:2085; }
+
+    server {
+        listen 443;
+        proxy_pass veil_443;
+        proxy_timeout 24h;
+        proxy_connect_timeout 10s;
+    }
+    server {
+        listen 446;
+        proxy_pass veil_446;
+        proxy_timeout 24h;
+        proxy_connect_timeout 10s;
+    }
+    server {
+        listen 447;
+        proxy_pass veil_447;
+        proxy_timeout 24h;
+        proxy_connect_timeout 10s;
+    }
+    server {
+        listen 448;
+        proxy_pass veil_448;
+        proxy_timeout 24h;
+        proxy_connect_timeout 10s;
+    }
+    server {
+        listen 8445;
+        proxy_pass veil_8445;
+        proxy_timeout 24h;
+        proxy_connect_timeout 10s;
+    }
+    server {
+        listen 2085;
+        proxy_pass veil_2085;
+        proxy_timeout 24h;
+        proxy_connect_timeout 10s;
+    }
