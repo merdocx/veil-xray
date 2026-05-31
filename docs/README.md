@@ -4,7 +4,7 @@
 |----------|------------|
 | [../README.md](../README.md) | Установка, быстрый старт, API в общих чертах |
 | [OPERATIONS.md](OPERATIONS.md) | **Сервисы, логи, ротация, автозапуск, мониторинг** |
-| [../API_DOCUMENTATION.md](../API_DOCUMENTATION.md) | Полное описание REST API |
+| [../API_DOCUMENTATION.md](../API_DOCUMENTATION.md) | REST API; UX пользователя и интеграция с veilbot |
 | [../HTTPS_SETUP.md](../HTTPS_SETUP.md) | HTTPS и Nginx |
 | [../CHANGELOG.md](../CHANGELOG.md) | История изменений |
 | [operations/egress-modes.md](operations/egress-modes.md) | **Egress: direct / SOCKS / WireGuard, релей на любом сервере** |
