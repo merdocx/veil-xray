@@ -2,7 +2,7 @@
 
 Краткие правила эксплуатации production-узла. **Лимиты и примеры .env:** [SERVER_PROFILE.md](SERVER_PROFILE.md). Подробнее: [OPERATIONS.md](../OPERATIONS.md), [load-protection/](load-protection/).
 
-**Текущий узел:** 2 vCPU / 4 GiB · ~100 ключей · veil-xray **1.3.20**.
+**Текущий узел:** 2 vCPU / 4 GiB · ~100 ключей · veil-xray см. [VERSION](../../VERSION).
 
 ## Запрещено на production
 

@@ -117,4 +117,4 @@ Veil-xray **не** переключает пользователя между р
 - [egress-modes.md](egress-modes.md) — варианты B и C
 - [routing-split-ru-restore.md](routing-split-ru-restore.md) — опциональный geo-split на **одном** узле (routing в Xray, не отдельный мост)
 - [OPERATIONS.md](../OPERATIONS.md) — systemd, деплой
-- [API_DOCUMENTATION.md](../../API_DOCUMENTATION.md) — REST API и UX для пользователя
+- [API_DOCUMENTATION.md](../../API_DOCUMENTATION.md) — REST API, UX, автовыбор (veilbot vs панель)

@@ -3,6 +3,9 @@
 ### Удалено
 - Топология **D (RU-мост)** и API `profile=ru` / `profiles=ru`; документ `ru-bridge-chain.md` заменён на [topologies.md](docs/operations/topologies.md).
 
+### Документация
+- Синхронизация версии **1.3.22**; раздел автовыбора: veilbot (между VPS) vs панель (urltest 448/447).
+
 ## [1.3.21] - 2026-05-31
 
 ### Изменено
