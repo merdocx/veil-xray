@@ -1,5 +1,8 @@
 ## [1.3.20] - 2026-05-30
 
+### Документация
+- Синхронизация версии **1.3.20** в README, API_DOCUMENTATION, SERVER_PROFILE, PRODUCTION_RUNBOOK, `setup.py`, метаданные FastAPI.
+
 ### Добавлено
 - [docs/operations/SERVER_REQUIREMENTS.md](docs/operations/SERVER_REQUIREMENTS.md) — требования к VPS, мониторинг, автозапуск, ротация логов.
 - `scripts/ops/server-load-status.sh` — краткий статус загрузки и сервисов.
