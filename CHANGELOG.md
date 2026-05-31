@@ -1,6 +1,7 @@
 ## [1.3.21] - 2026-05-31
 
 ### Документация
+- Документация и шаблоны: плейсхолдеры вместо конкретных IP, стран и prod-хостов (`<VPN_PUBLIC_IP>`, `<RELAY_HOST>`, `<server-a>` и т.д.).
 - [API_DOCUMENTATION.md](API_DOCUMENTATION.md) — раздел «UX для пользователя и интеграция с veilbot» (VLESS vs вложенная подписка `singbox_b64`).
 - [docs/operations/relay-front-topology.md](docs/operations/relay-front-topology.md) — вариант **E**: пользователь → front relay (L4) → veil-xray → интернет.
 - [ru-bridge-chain.md](docs/operations/ru-bridge-chain.md) — таблица топологий A–E; различие front relay (E) vs egress (B/C) vs мост (D).

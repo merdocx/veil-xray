@@ -7,7 +7,7 @@
 Перед продакшеном:
 
 1. Сгенерируйте свои ключи Reality: `xray x25519`
-2. Замените IP релея `77.238.243.136` на **ваш** egress-хост (любой VPS/страна)
+2. Замените `<RELAY_HOST>` в `config.example.json` на **ваш** egress-хост (любой VPS)
 3. Выберите режим исходящего трафика: [docs/operations/egress-modes.md](../docs/operations/egress-modes.md)
 
 Проверка: `xray run -test -config /usr/local/etc/xray/config.json`

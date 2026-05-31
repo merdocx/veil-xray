@@ -297,7 +297,7 @@
       "settings": {
         "servers": [
           {
-            "address": "77.238.243.136",
+            "address": "<RELAY_HOST>",
             "port": 1080
           }
         ]
@@ -328,7 +328,7 @@
       {
         "type": "field",
         "ip": [
-          "77.238.243.136"
+          "<RELAY_IP>"
         ],
         "outboundTag": "direct"
       },

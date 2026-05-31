@@ -82,7 +82,7 @@ sudo ln -s /etc/nginx/sites-available/veil-xray-api /etc/nginx/sites-enabled/
 sudo nano /etc/nginx/sites-available/veil-xray-api
 ```
 
-Замените `veil-bear.ru` на ваш домен в двух местах:
+Замените `your-domain.example` (или плейсхолдер в шаблоне) на ваш домен:
 - В блоке `server_name` для HTTP (порт 80)
 - В блоке `server_name` для HTTPS (порт 443)
 

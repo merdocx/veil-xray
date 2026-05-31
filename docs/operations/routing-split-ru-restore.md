@@ -2,7 +2,7 @@
 
 Сейчас в `config.json` может быть **упрощённый** `routing`: весь трафик `vless-reality` → `upstream` (SOCKS на **релей**), кроме IP релея → `direct`, **UDP/TCP :53** → `direct` (DNS), и `geoip:private` → `block`.
 
-Замените `77.238.243.136` в фрагменте ниже на IP **вашего** релея. См. [egress-modes.md](egress-modes.md).
+Замените `<RELAY_IP>` в фрагменте ниже на IP **вашего** релея. См. [egress-modes.md](egress-modes.md).
 
 Чтобы **вернуть** разделение (RU `direct`, зарубеж `upstream`, правила Meta и DNS), замените массив `routing.rules` на фрагмент ниже (проверьте `xray -test` и пути `geoip.dat` / `geosite.dat`).
 
@@ -15,7 +15,7 @@
   },
   {
     "type": "field",
-    "ip": ["77.238.243.136"],
+    "ip": ["<RELAY_IP>"],
     "outboundTag": "direct"
   },
   {

@@ -1,6 +1,6 @@
 # Рекомендуемые настройки (prod)
 
-**Актуально:** 2026-05-29 · Xray **26.2.6** · ~100 ключей · пример: вход **193.124.65.182** → egress через **релей** (WireGuard; IP релея в вашем деплое свой)
+**Актуально:** 2026-05-31 · Xray **26.x** · ~100 ключей · пример: вход **`<VPN_PUBLIC_IP>`** → egress через **релей** (WireGuard; `<RELAY_HOST>` — свой)
 
 Единая шпаргалка по значениям из [Xray Policy](https://xtls.github.io/en/config/policy.html) и практик VLESS+Reality (2026). Эталон на сервере: [SERVER_PROFILE.md](SERVER_PROFILE.md).
 
@@ -15,7 +15,7 @@
 | `flow` | `xtls-rprx-vision` |
 | `fp` | `chrome` (или fingerprint браузера на устройстве) |
 | `sni` | `microsoft.com` (как на сервере) |
-| `sid` | общий `REALITY_COMMON_SHORT_ID` (напр. `f6de7940`) |
+| `sid` | общий `REALITY_COMMON_SHORT_ID` (напр. `7bb45050`) |
 | Порт | `443` |
 
 Перед продакшеном: `xray run -test -config config.json` на сервере.

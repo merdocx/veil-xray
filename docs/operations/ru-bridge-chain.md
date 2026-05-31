@@ -32,7 +32,7 @@ B:  [Клиент] ──► [veil-xray] ──SOCKS──► [egress-релей
 
 C:  [Клиент] ──► [veil-xray] ──WG──► [egress-релей] ──► [Интернет]
 
-D:  [Клиент РФ] ──► [мост РФ] ──chain──► [veil-xray] ──► [Интернет]
+D:  [Клиент] ──► [мост / bridge VPS] ──chain──► [veil-xray] ──► [Интернет]
 ```
 
 Подробнее: **E** — [relay-front-topology.md](relay-front-topology.md); **B/C** — [egress-modes.md](egress-modes.md).
@@ -58,7 +58,7 @@ D:  [Клиент РФ] ──► [мост РФ] ──chain──► [veil-xra
 4. Клиент (Happ и др.) подключается **напрямую** к IP/DNS **veil-xray**.
 5. Исходящий трафик — outbound **`direct`** в `config.json` (шаблон: [xray/config.example.json](../../xray/config.example.json) без релея или с routing только на `direct`).
 
-**Не требуется:** второй VPS в РФ, WireGuard, SOCKS, отдельный chain-inbound.
+**Не требуется:** второй VPS моста, WireGuard, SOCKS, отдельный chain-inbound.
 
 ### API (базовые эндпоинты)
 
@@ -116,12 +116,12 @@ API по-прежнему только управляет **clients** inbounds.
 
 ## Вариант D — опционально: RU-мост → egress
 
-Отдельный VPS в РФ принимает клиентов; зарубежный veil-xray остаётся egress.  
-Имеет смысл при проблемах «клиент РФ → foreign IP» (freeze DPI), а не как обязательный шаг установки.
+Отдельный VPS (мост) принимает клиентов; veil-xray на egress остаётся точкой выхода.  
+Имеет смысл при нестабильных длинных сессиях «клиент → зарубежный IP напрямую», а не как обязательный шаг установки.
 
 ### Когда рассматривать
 
-- База (A) уже работает, но из РФ нестабильны длинные сессии на зарубежный IP.
+- База (A) уже работает, но у части клиентов нестабильны длинные сессии на IP egress напрямую.
 - Готовы администрировать **второй** сервер и согласовать chain с egress.
 
 ### Кратко по потоку
@@ -141,7 +141,7 @@ API по-прежнему только управляет **clients** inbounds.
 
 | Плейсхолдер | Откуда |
 |-------------|--------|
-| `<BRIDGE_PUBLIC_IP>` | IP RU VPS |
+| `<BRIDGE_PUBLIC_IP>` | IP bridge VPS |
 | `<EGRESS_PUBLIC_IP>` | IP veil-xray |
 | `<CHAIN_PORT>` | Свободный порт на egress для моста |
 | `<USER_UUID>` | API / бот |

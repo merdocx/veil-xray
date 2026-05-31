@@ -99,7 +99,7 @@ tail -1 /var/log/veil-slo.log
 **Профиль порогов по RAM:**
 
 ```bash
-# 2 GiB VPS (типичный Fornex 2GB)
+# 2 GiB VPS (малый тариф)
 sudo /opt/veil-xray/scripts/ops/apply-slo-profile.sh 2g
 
 # 4 GiB prod (эталон SERVER_PROFILE)

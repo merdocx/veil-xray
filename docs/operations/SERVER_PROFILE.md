@@ -1,8 +1,8 @@
 # Профиль production-сервера (эталон настроек)
 
-**Актуально на:** 2026-05-30 · **Версия veil-xray:** 1.3.20 · **Хост:** v3091624 (VDSina)
+**Актуально на:** 2026-05-31 · **Версия veil-xray:** см. [VERSION](../../VERSION) · **Хост (пример):** `<hostname>`
 
-Этот документ — **единый справочник** лимитов и примеров конфигурации для текущего узла. При смене тарифа, порогов или policy обновляйте его вместе с `scripts/load-protection/slo-thresholds.env` и [08-capacity-decision.md](load-protection/08-capacity-decision.md).
+Этот документ — **шаблон-справочник** лимитов и примеров для **одного** prod-узла. Подставьте свои IP/домены; при смене тарифа обновляйте вместе с `slo-thresholds.env` и [08-capacity-decision.md](load-protection/08-capacity-decision.md).
 
 ---
 
@@ -14,7 +14,7 @@
 | RAM | **4 GiB** (~3.8 GiB видимой, MemAvailable типично **2.5–2.9 GiB**) |
 | Диск | 100 GiB |
 | Трафик (лимит хостера) | 32 TiB / период |
-| Публичный IP (вход VPN) | `193.124.65.182` |
+| Публичный IP (вход VPN) | `<VPN_PUBLIC_IP>` |
 | Активных ключей | ~**100** |
 | Путь проекта | `/root/veil-xray` |
 
@@ -65,12 +65,12 @@ XRAY_CONFIG_PATH=/usr/local/etc/xray/config.json
 XRAY_API_HOST=127.0.0.1
 XRAY_API_PORT=10085
 
-REALITY_SERVER_NAME=193.124.65.182
+REALITY_SERVER_NAME=<VPN_PUBLIC_IP>
 REALITY_SNI=microsoft.com
 REALITY_FINGERPRINT=chrome
 REALITY_DEST=www.microsoft.com:443
 REALITY_PORT=443
-REALITY_COMMON_SHORT_ID=f6de7940
+REALITY_COMMON_SHORT_ID=<REALITY_COMMON_SHORT_ID>
 REALITY_FLOW=xtls-rprx-vision
 
 ENABLE_BACKGROUND_TRAFFIC_SYNC=true
@@ -109,13 +109,13 @@ LOG_LEVEL=INFO
 - Inbound: `vless-reality` :443  
 - Исходящий трафик клиентов: outbound **`wg-egress`** (`freedom` + `sockopt.mark` **119** / `0x77`)  
 - Таблица `wg77`: default via `10.77.0.1 dev wg0`  
-- WireGuard peer (пример): **77.238.243.136:51820**  
+- WireGuard peer (пример): **`<RELAY_HOST>:51820`**  
 - SOCKS `upstream` (тот же хост :1080) — запасной путь; на этом узле основной egress — **WG**
 
 ### Reality (пример ссылки для клиента)
 
 ```
-vless://<uuid>@193.124.65.182:443?type=tcp&security=reality&sni=microsoft.com&fp=chrome&pbk=<REALITY_PUBLIC_KEY>&sid=f6de7940&spx=/&flow=xtls-rprx-vision
+vless://<uuid>@<VPN_PUBLIC_IP>:443?type=tcp&security=reality&sni=<REALITY_SNI>&fp=chrome&pbk=<REALITY_PUBLIC_KEY>&sid=<REALITY_COMMON_SHORT_ID>&spx=/&flow=xtls-rprx-vision
 ```
 
 ---
