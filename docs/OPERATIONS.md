@@ -9,7 +9,7 @@
 
 Деплой: `scripts/ops/deploy-prod.sh` — pull в `/root`, `rsync` в `/opt`, restart API.
 
-**Эталон:** [operations/SERVER_PROFILE.md](operations/SERVER_PROFILE.md) · **Рекомендуемые значения:** [operations/RECOMMENDED_SETTINGS.md](operations/RECOMMENDED_SETTINGS.md). **Топологии (база / мост / WG — опции):** [operations/ru-bridge-chain.md](operations/ru-bridge-chain.md).
+**Эталон:** [operations/SERVER_PROFILE.md](operations/SERVER_PROFILE.md) · **Рекомендуемые значения:** [operations/RECOMMENDED_SETTINGS.md](operations/RECOMMENDED_SETTINGS.md). **Топологии (база / relay / WG — опции):** [operations/topologies.md](operations/topologies.md).
 
 ## API: ключи без перезагрузки Xray
 
@@ -24,7 +24,7 @@
 |----------|------------|
 | Создание ключа | `POST /keys` → `GET .../bot-bundle` или `link?profile=happ` |
 | Подписка Happ | `GET .../subscription?profiles=auto&format=singbox_b64` (fallback: `happ-config` по каждому серверу) |
-| Профили | `auto` — одна vless :448 + sing-box; `ru` / `all` — см. [API_DOCUMENTATION.md](../API_DOCUMENTATION.md) |
+| Профили | `auto` — одна vless :448 + sing-box; `all` — см. [API_DOCUMENTATION.md](../API_DOCUMENTATION.md) |
 - `POST /api/system/xray/sync-config` — только repair (не после каждого ключа); в peak hours MSK по умолчанию 503.
 
 ## Автозапуск (systemd)

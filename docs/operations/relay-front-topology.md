@@ -10,7 +10,6 @@
 |--------|-----------|------------------|
 | **E (этот документ)** | **Перед** VPN | L4 forward (nginx stream / DNAT), без Xray |
 | **B / C** [egress-modes.md](egress-modes.md) | **После** VPN | Egress: SOCKS или WireGuard, исходящий IP релея |
-| **D** [ru-bridge-chain.md](ru-bridge-chain.md) | Мост **вместо** прямого входа | Xray на мосте, chain на egress (прикладной уровень) |
 
 ---
 
@@ -141,7 +140,6 @@ nc -zv <VPN_BACKEND_IP> 443
 |------------|--------|
 | **E + A** | Релей спереди, egress `direct` с backend |
 | **E + B/C** | Релей спереди, egress через SOCKS/WG с backend |
-| **E + D** | Обычно **не** смешивают: D уже даёт вход через bridge VPS; E — другой паттерн (чистый L4) |
 
 ---
 
@@ -156,6 +154,6 @@ nc -zv <VPN_BACKEND_IP> 443
 
 ## Связанные документы
 
-- [ru-bridge-chain.md](ru-bridge-chain.md) — сводная таблица A–E
+- [topologies.md](topologies.md) — сводная таблица A, B, C, E
 - [egress-modes.md](egress-modes.md) — B/C (релей **после** VPN)
 - [API_DOCUMENTATION.md](../../API_DOCUMENTATION.md) — выдача ссылок (`DOMAIN`)

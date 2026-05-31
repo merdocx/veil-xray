@@ -3,7 +3,6 @@
 from api.utils import (
     build_auto_singbox_subscription_config,
     build_client_config,
-    build_ru_singbox_subscription_config,
     build_auto_subscription_links,
 )
 from config.settings import settings
@@ -86,13 +85,3 @@ def test_build_auto_singbox_urltest_when_sni_b(monkeypatch):
     assert urltest["tag"] == "proxy"
     assert set(urltest["outbounds"]) == {"member-448", "member-447"}
 
-
-def test_build_ru_singbox_xhttp_outbound(monkeypatch):
-    monkeypatch.setattr(settings, "domain", "vpn.example.com")
-    cfg = build_ru_singbox_subscription_config(
-        uuid="00000000-0000-4000-8000-000000000099",
-        public_key="pk_test",
-    )
-    assert cfg["inbounds"][0]["type"] == "tun"
-    proxy = next(o for o in cfg["outbounds"] if o.get("tag") == "proxy")
-    assert proxy["transport"]["type"] == "xhttp"

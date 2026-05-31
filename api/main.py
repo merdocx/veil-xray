@@ -61,8 +61,6 @@ from api.utils import (
     build_happ_xray_client_config,
     build_auto_subscription_links,
     build_auto_singbox_subscription_config,
-    build_ru_subscription_links,
-    build_ru_singbox_subscription_config,
     _server_address_for_links,
 )
 from config.settings import settings
@@ -689,7 +687,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="Veil Xray API",
     description="API для управления VLESS+Reality VPN сервером",
-    version="1.3.21",
+    version="1.3.22",
     lifespan=lifespan,
     **_docs_kw,
 )
@@ -1100,7 +1098,6 @@ async def get_vless_link(
     profile:
     - primary (по умолчанию): tcp:443 + Vision flow
     - happ / auto: tcp:448 без flow (рекомендуется для Happ на iOS)
-    - ru: XHTTP :8445 + Vision (для пользователей в РФ)
     """
     try:
         # Определяем тип идентификатора (UUID или key_id)
@@ -1166,20 +1163,6 @@ async def get_vless_link(
                 transport="tcp",
                 path="/",
                 remark=settings.link_remark,
-            )
-        elif profile == "ru":
-            vless_link = build_vless_link_with_transport(
-                uuid=str(key.uuid),  # type: ignore
-                short_id=common_short_id,
-                server_address=server,
-                port=settings.reality_xhttp_port,
-                sni=settings.reality_sni,
-                fingerprint=settings.reality_fingerprint,
-                public_key=public_key,
-                flow=settings.reality_flow,
-                transport="xhttp",
-                path=settings.reality_xhttp_path,
-                remark="RU-xhttp",
             )
         else:
             vless_link = build_vless_link(
@@ -1705,11 +1688,10 @@ async def get_key_subscription(
 
     profiles:
     - auto / happ: одна vless-ссылка :448; sing-box — TUN + urltest при 2+ inbounds (SNI-B)
-    - ru: XHTTP (+ fallback-ссылки); sing-box с XHTTP outbound
     - primary / stable / all: фильтрованные ссылки из /links
 
     format:
-    - base64 / plain: vless:// (несколько строк только у ru / all)
+    - base64 / plain: vless:// (несколько строк у profiles=all)
     - singbox / singbox_b64 / happ_json: sing-box JSON
     - xray / xray_json: один outbound :448 + DNS (без observatory)
 
@@ -1749,8 +1731,6 @@ async def get_key_subscription(
         lines = build_auto_subscription_links(
             uuid=uid, public_key=public_key, public_key_b=public_key_b
         )
-    elif profiles == "ru":
-        lines = build_ru_subscription_links(uuid=uid, public_key=public_key)
     else:
         links_resp = await get_key_links(identifier=identifier, token=token, db=db)
         profile_filter: dict[str, set[str]] = {
@@ -1768,7 +1748,7 @@ async def get_key_subscription(
         if allowed is None:
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                detail="Invalid profiles. Use 'auto', 'happ', 'ru', 'primary', 'stable', or 'all'.",
+                detail="Invalid profiles. Use 'auto', 'happ', 'primary', 'stable', or 'all'.",
             )
         lines = [x.link for x in links_resp.links if x.profile in allowed]
 
@@ -1778,10 +1758,6 @@ async def get_key_subscription(
         "public_key": public_key,
         "public_key_b": public_key_b,
     }
-    if profiles == "ru":
-        singbox_builder = build_ru_singbox_subscription_config
-        singbox_kwargs = {"uuid": uid, "public_key": public_key}
-
     if not lines:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,

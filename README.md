@@ -21,7 +21,7 @@
 | Первый деплой (чеклист) | [docs/operations/FIRST_DEPLOY.md](docs/operations/FIRST_DEPLOY.md) |
 | Индекс всех документов | [docs/README.md](docs/README.md) |
 | Бэкапы SQLite и логирование API | [scripts/BACKUP_AND_LOGGING.md](scripts/BACKUP_AND_LOGGING.md) |
-| **Топологии (A–E: база, front relay, egress, мост)** | [docs/operations/ru-bridge-chain.md](docs/operations/ru-bridge-chain.md) |
+| **Топологии (A, B, C, E)** | [docs/operations/topologies.md](docs/operations/topologies.md) |
 | **Egress (direct / SOCKS / WireGuard после VPN)** | [docs/operations/egress-modes.md](docs/operations/egress-modes.md) |
 | **Front relay (релей перед VPN, L4)** | [docs/operations/relay-front-topology.md](docs/operations/relay-front-topology.md) |
 | **Профиль prod-сервера (лимиты, .env, SLO)** | [docs/operations/SERVER_PROFILE.md](docs/operations/SERVER_PROFILE.md) |
