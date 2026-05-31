@@ -43,7 +43,7 @@ fi
 echo -e "${BLUE}📋 Проверка настроек...${NC}"
 if [ -f "/root/config/settings.py" ]; then
     DOMAIN=$(grep -E "domain.*=" /root/config/settings.py | head -1 | sed -E "s/.*['\"]([^'\"]+)['\"].*/\1/" | head -1)
-    if [ ! -z "$DOMAIN" ] && [ "$DOMAIN" != "veil-bear.ru" ]; then
+    if [ ! -z "$DOMAIN" ] && [ "$DOMAIN" != "your-domain.example" ]; then
         echo -e "${GREEN}✅ Домен найден в настройках: $DOMAIN${NC}"
     else
         warn "Домен не найден в настройках или используется значение по умолчанию"

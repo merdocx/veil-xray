@@ -30,7 +30,7 @@ def test_build_vless_link():
     """Тест построения VLESS ссылки"""
     uuid = "123e4567-e89b-12d3-a456-426614174000"
     short_id = "abcd1234"
-    server_address = "veil-bear.ru"
+    server_address = "vpn.example.com"
     port = 443
     sni = "microsoft.com"
     fingerprint = "chrome"

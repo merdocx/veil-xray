@@ -51,7 +51,7 @@ CONFIG_FILE="/etc/nginx/sites-available/$CONFIG_NAME"
 echo ""
 echo "📝 Копирование конфигурации Nginx..."
 # Создаем временную конфигурацию с заменой домена
-sed "s/api\.veil-bear\.ru/$SUBDOMAIN/g" /root/veil-xray/scripts/nginx-api-subdomain.conf > /tmp/nginx-api-subdomain.conf
+sed "s/api\.your-domain\.example/$SUBDOMAIN/g" /root/veil-xray/scripts/nginx-api-subdomain.conf > /tmp/nginx-api-subdomain.conf
 sudo cp /tmp/nginx-api-subdomain.conf "$CONFIG_FILE"
 sudo ln -sf "$CONFIG_FILE" /etc/nginx/sites-enabled/$CONFIG_NAME
 rm -f /tmp/nginx-api-subdomain.conf

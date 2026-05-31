@@ -61,7 +61,7 @@ def test_build_client_config_includes_sni_b(monkeypatch):
 
 
 def test_build_auto_subscription_single_happ_port(monkeypatch):
-    monkeypatch.setattr(settings, "domain", "38.244.134.230")
+    monkeypatch.setattr(settings, "domain", "vpn.example.com")
     links = build_auto_subscription_links(
         uuid="00000000-0000-4000-8000-000000000099",
         public_key="pk_test",
@@ -88,7 +88,7 @@ def test_build_auto_singbox_urltest_when_sni_b(monkeypatch):
 
 
 def test_build_ru_singbox_xhttp_outbound(monkeypatch):
-    monkeypatch.setattr(settings, "domain", "38.244.134.230")
+    monkeypatch.setattr(settings, "domain", "vpn.example.com")
     cfg = build_ru_singbox_subscription_config(
         uuid="00000000-0000-4000-8000-000000000099",
         public_key="pk_test",

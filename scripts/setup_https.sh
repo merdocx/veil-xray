@@ -23,7 +23,7 @@ fi
 DEFAULT_DOMAIN=""
 if [ -f "/root/veil-xray/config/settings.py" ]; then
     DEFAULT_DOMAIN=$(grep -E "domain.*=" /root/veil-xray/config/settings.py | head -1 | sed -E "s/.*['\"]([^'\"]+)['\"].*/\1/" | head -1)
-    if [ "$DEFAULT_DOMAIN" = "veil-bear.ru" ]; then
+    if [ "$DEFAULT_DOMAIN" = "your-domain.example" ]; then
         DEFAULT_DOMAIN=""  # Игнорируем значение по умолчанию
     fi
 fi
@@ -33,7 +33,7 @@ if [ ! -z "$DEFAULT_DOMAIN" ]; then
     read -p "Введите ваш домен [$DEFAULT_DOMAIN]: " DOMAIN
     DOMAIN=${DOMAIN:-$DEFAULT_DOMAIN}
 else
-    read -p "Введите ваш домен (например, veil-bear.ru): " DOMAIN
+    read -p "Введите ваш домен (например, your-domain.example): " DOMAIN
 fi
 
 if [ -z "$DOMAIN" ]; then
@@ -87,7 +87,7 @@ if [ ! -f "$TEMPLATE_FILE" ]; then
 fi
 
 # Замена домена в шаблоне
-sed "s/veil-bear.ru/$DOMAIN/g" "$TEMPLATE_FILE" > "$CONF_FILE"
+sed "s/your-domain.example/$DOMAIN/g" "$TEMPLATE_FILE" > "$CONF_FILE"
 
 echo "✅ Конфигурация создана: $CONF_FILE"
 

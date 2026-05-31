@@ -63,6 +63,7 @@ from api.utils import (
     build_auto_singbox_subscription_config,
     build_ru_subscription_links,
     build_ru_singbox_subscription_config,
+    _server_address_for_links,
 )
 from config.settings import settings
 
@@ -1150,9 +1151,7 @@ async def get_vless_link(
             pass
 
         common_short_id = settings.reality_common_short_id
-        server = settings.domain
-        if "." not in server or server.endswith(".ru"):
-            server = "38.244.134.230"
+        server = _server_address_for_links()
 
         if profile in ("happ", "auto"):
             vless_link = build_vless_link_with_transport(
@@ -1166,7 +1165,7 @@ async def get_vless_link(
                 flow="",
                 transport="tcp",
                 path="/",
-                remark="Казахстан",
+                remark=settings.link_remark,
             )
         elif profile == "ru":
             vless_link = build_vless_link_with_transport(

@@ -2,15 +2,21 @@
 # На входном узле: проверить, что выход через SOCKS-релей даёт IP релея, а не IP входа.
 #
 # Переменные:
-#   RELAY_HOST / SOCKS_HOST     — хост SOCKS (по умолчанию 77.238.243.136 — пример из репо)
+#   RELAY_HOST / SOCKS_HOST     — хост SOCKS (обязательно)
 #   SOCKS_PORT                  — порт SOCKS (1080)
 #   EXPECTED_RELAY_IP           — ожидаемый внешний IP при выходе через SOCKS
 # Usage:
-#   RELAY_HOST=1.2.3.4 EXPECTED_RELAY_IP=1.2.3.4 bash scripts/verify-egress-via-relay.sh
+#   RELAY_HOST=<RELAY_IP> EXPECTED_RELAY_IP=<RELAY_IP> bash scripts/verify-egress-via-relay.sh
 set -euo pipefail
 
-RELAY_HOST="${RELAY_HOST:-${SOCKS_HOST:-77.238.243.136}}"
+RELAY_HOST="${RELAY_HOST:-${SOCKS_HOST:-}}"
 SOCKS_PORT="${SOCKS_PORT:-1080}"
+
+if [[ -z "${RELAY_HOST}" ]]; then
+  echo "Set RELAY_HOST=<relay-ip> (and optionally EXPECTED_RELAY_IP=…)" >&2
+  exit 2
+fi
+
 EXPECTED_RELAY_IP="${EXPECTED_RELAY_IP:-$RELAY_HOST}"
 
 echo "=== Direct egress (no proxy) ==="

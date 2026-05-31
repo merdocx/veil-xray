@@ -1,5 +1,9 @@
 ## [1.3.21] - 2026-05-31
 
+### Изменено
+- Код и nginx-шаблоны: без захардкоженных IP/стран; `DOMAIN` / `VLESS_LINK_REMARK` в ссылках; defaults в `settings.py` — `your-domain.example`.
+- `verify-egress-via-relay.sh`: обязательный `RELAY_HOST`.
+
 ### Документация
 - Документация и шаблоны: плейсхолдеры вместо конкретных IP, стран и prod-хостов (`<VPN_PUBLIC_IP>`, `<RELAY_HOST>`, `<server-a>` и т.д.).
 - [API_DOCUMENTATION.md](API_DOCUMENTATION.md) — раздел «UX для пользователя и интеграция с veilbot» (VLESS vs вложенная подписка `singbox_b64`).

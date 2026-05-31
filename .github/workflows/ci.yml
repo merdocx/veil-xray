@@ -53,7 +53,7 @@ jobs:
         echo "DATABASE_URL=sqlite:///./test.db" >> $GITHUB_ENV
         echo "XRAY_API_HOST=127.0.0.1" >> $GITHUB_ENV
         echo "XRAY_API_PORT=10085" >> $GITHUB_ENV
-        echo "API_ALLOWED_IPS=127.0.0.1,89.110.76.53,91.184.245.209,testclient" >> $GITHUB_ENV
+        echo "API_ALLOWED_IPS=127.0.0.1,testclient" >> $GITHUB_ENV
         echo "API_ENABLE_DOCS=false" >> $GITHUB_ENV
     
     - name: Lint with flake8

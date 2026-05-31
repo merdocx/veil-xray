@@ -590,10 +590,10 @@ def _singbox_vless_outbound(
 
 
 def _server_address_for_links() -> str:
-    server = settings.domain
-    if "." not in server or server.endswith(".ru"):
-        return "38.244.134.230"
-    return server
+    domain = (settings.domain or "").strip()
+    if domain:
+        return domain
+    return (settings.reality_server_name or "localhost").strip()
 
 
 def build_ru_subscription_links(
@@ -718,7 +718,7 @@ def build_auto_subscription_links(
             flow="",
             transport="tcp",
             path="/",
-            remark="Казахстан",
+            remark=settings.link_remark,
         ),
     ]
 
@@ -846,7 +846,7 @@ def build_happ_xray_client_config(
     server = _server_address_for_links()
 
     return {
-        "remarks": "Казахстан",
+        "remarks": settings.link_remark,
         "log": {"loglevel": "warning"},
         "dns": {
             "queryStrategy": "UseIPv4",

@@ -15,7 +15,7 @@ class Settings(BaseSettings):
 
     # Список IP, с которых разрешён доступ к API (через запятую).
     # Административные сервера + 127.0.0.1 для локальных проверок на хосте.
-    api_allowed_ips: str = "127.0.0.1,89.110.76.53,91.184.245.209"
+    api_allowed_ips: str = "127.0.0.1"
 
     # Swagger/ReDoc/OpenAPI (в проде обычно выключено)
     api_enable_docs: bool = False
@@ -33,7 +33,7 @@ class Settings(BaseSettings):
     xray_config_path: str = "/usr/local/etc/xray/config.json"
 
     # Reality настройки (универсальные параметры)
-    reality_server_name: str = "veil-bear.ru"
+    reality_server_name: str = "your-domain.example"
     reality_sni: str = "microsoft.com"
     reality_fingerprint: str = "chrome"
     reality_dest: str = "www.microsoft.com:443"
@@ -58,8 +58,11 @@ class Settings(BaseSettings):
     # Flow для VLESS (для Xray 26.x обязателен отличный от "none"; рекомендуется xtls-rprx-vision)
     reality_flow: str = "xtls-rprx-vision"
 
-    # Домен
-    domain: str = "veil-bear.ru"
+    # Домен / хост в VLESS-ссылках (IP или DNS)
+    domain: str = "your-domain.example"
+
+    # Имя в фрагменте vless://…#remark (пусто = DOMAIN)
+    vless_link_remark: str = ""
 
     # Теги inbounds в Xray (должны совпадать с config.json)
     xray_vless_reality_inbound_tag: str = "vless-reality"
@@ -93,6 +96,11 @@ class Settings(BaseSettings):
     traffic_cache_ttl_s: int = 3600
 
     model_config = SettingsConfigDict(env_file=".env", case_sensitive=False)
+
+    @property
+    def link_remark(self) -> str:
+        remark = self.vless_link_remark.strip()
+        return remark if remark else self.domain
 
     @property
     def allowed_ip_list(self) -> List[str]:
